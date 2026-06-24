@@ -1,0 +1,38 @@
+*.iml
+.gradle
+/local.properties
+/.idea/caches
+/.idea/libraries
+/.idea/modules.xml
+/.idea/workspace.xml
+/.idea/navEditor.xml
+/.idea/assetWizardSettings.xml
+.DS_Store
+/build
+/captures
+.externalNativeBuild
+.cxx
+local.properties
+*.apk
+*.ap_
+*.aab
+*.dex
+*.class
+bin/
+gen/
+out/
+.gradle/
+build/
+local.properties
+proguard/
+*.log
+*.hprof
+# Vosk models — скачиваются в CI
+app/src/main/assets/vosk/ru/
+app/src/main/assets/vosk/de/
+
+# Ignore all jar files
+*.jar
+
+# But keep the gradle wrapper jar
+!gradle/wrapper/gradle-wrapper.jar
