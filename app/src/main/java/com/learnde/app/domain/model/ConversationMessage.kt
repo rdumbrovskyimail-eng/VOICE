@@ -7,7 +7,8 @@ data class ConversationMessage(
     val role: String,
     val text: String,
     val timestamp: Long = System.currentTimeMillis(),
-    val attachmentNote: String? = null
+    val attachmentNote: String? = null,
+    val attachmentUris: List<String> = emptyList()   // ← URI‑строки вложений (для превью)
 ) {
     companion object {
         const val ROLE_USER = "user"
