@@ -26,4 +26,6 @@ interface AudioEngine {
     fun setMicGain(gain: Float)
 
     fun setSpeakerRouting(forceSpeaker: Boolean)
+
+    fun setAecEnabled(enabled: Boolean)
 }
