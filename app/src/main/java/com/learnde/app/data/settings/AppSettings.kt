@@ -40,15 +40,16 @@ data class AppSettings(
     val model: String = "models/gemini-3.1-flash-live-preview",
 
     // ─────────── Генерация ───────────
-    val temperature: Float = 0.8f,
+    val temperature: Float = 0.7f,   // собраннее: меньше «воды», надёжнее зовёт update_dashboard
     val topP: Float = 0.95f,
     val topK: Int = 0,                 // 0 = не отправлять topK (валидно для Live API)
     val maxOutputTokens: Int = 8192,
     val responseModality: String = "AUDIO",
 
     // ─────────── Голос ───────────
-    // Puck = "Warm" (тёплый, естественный). Приятный универсальный голос для ассистента.
-    val voiceId: String = "Puck",
+    // Sulafat = "Warm" (тёплый, естественный) — лучший универсальный голос ассистента.
+    // Альтернативы: "Puck" (Upbeat), "Charon" (Informative), "Aoede" (Breezy), "Kore".
+    val voiceId: String = "Sulafat",
 
     // ─────────── Аудио-движок ───────────
     val useAec: Boolean = true,
