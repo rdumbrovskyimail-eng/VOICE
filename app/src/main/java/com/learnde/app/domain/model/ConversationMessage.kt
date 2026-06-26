@@ -6,7 +6,8 @@ import androidx.compose.runtime.Immutable
 data class ConversationMessage(
     val role: String,
     val text: String,
-    val timestamp: Long = System.currentTimeMillis()
+    val timestamp: Long = System.currentTimeMillis(),
+    val attachmentNote: String? = null
 ) {
     companion object {
         const val ROLE_USER = "user"
