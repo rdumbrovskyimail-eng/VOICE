@@ -1,3 +1,15 @@
+// Путь: app/src/main/java/com/learnde/app/GeminiLiveForegroundService.kt
+//
+// Изменения относительно исходной версии:
+//   • Аудио-фокус запрашивается через AudioFocusRequest c USAGE_MEDIA (а не STREAM_VOICE_CALL),
+//     согласованно с воспроизведением AudioTrack (которое теперь тоже USAGE_MEDIA).
+//   • MODE_NORMAL (убран MODE_IN_COMMUNICATION) — он завышал маршрут в тихий звонковый поток.
+//   • Убрана ручная маршрутизация setCommunicationDevice/Bluetooth SCO: для USAGE_MEDIA
+//     система сама шлёт звук на динамик (или наушники, если подключены) на полной громкости.
+//   • Сохранены startIntent(context, forceSpeaker) / stopIntent(context), нотификация,
+//     FOREGROUND_SERVICE_TYPE_MICROPHONE|MEDIA_PLAYBACK — сервис стартует ДО захвата мика
+//     (требование Android 12+ для микрофона из foreground).
+
 package com.learnde.app
 
 import android.app.Notification
@@ -8,7 +20,8 @@ import android.app.Service
 import android.content.Context
 import android.content.Intent
 import android.content.pm.ServiceInfo
-import android.media.AudioDeviceInfo
+import android.media.AudioAttributes
+import android.media.AudioFocusRequest
 import android.media.AudioManager
 import android.os.Build
 import android.os.IBinder
@@ -39,8 +52,7 @@ class GeminiLiveForegroundService : Service() {
     }
 
     private var audioManager: AudioManager? = null
-    private var bluetoothScoActive = false
-    private var communicationDeviceSet = false
+    private var focusRequest: AudioFocusRequest? = null
 
     override fun onCreate() {
         super.onCreate()
@@ -52,14 +64,9 @@ class GeminiLiveForegroundService : Service() {
         startForegroundSafe()
 
         when (intent?.action) {
-            ACTION_START -> {
-                requestAudioFocus()
-                val forceSpeaker = intent.getBooleanExtra(EXTRA_FORCE_SPEAKER, true)
-                routeAudio(forceSpeaker)
-            }
+            ACTION_START -> requestMediaAudioFocus()
             ACTION_STOP -> {
                 releaseAudioFocus()
-                releaseAudioRouting()
                 stopForeground(STOP_FOREGROUND_REMOVE)
                 stopSelf()
             }
@@ -88,90 +95,31 @@ class GeminiLiveForegroundService : Service() {
         }
     }
 
-    private fun routeAudio(forceSpeaker: Boolean) {
+    // Фокус под МЕДИА-воспроизведение: громкий поток, режим NORMAL.
+    private fun requestMediaAudioFocus() {
         val am = audioManager ?: return
+        am.mode = AudioManager.MODE_NORMAL
 
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            runCatching {
-                val devices = am.availableCommunicationDevices
-                val target: AudioDeviceInfo? = if (forceSpeaker) {
-                    devices.firstOrNull { it.type == AudioDeviceInfo.TYPE_BUILTIN_SPEAKER }
-                } else {
-                    devices.firstOrNull {
-                        it.type == AudioDeviceInfo.TYPE_BLUETOOTH_SCO ||
-                                it.type == AudioDeviceInfo.TYPE_WIRED_HEADSET ||
-                                it.type == AudioDeviceInfo.TYPE_WIRED_HEADPHONES
-                    } ?: devices.firstOrNull { it.type == AudioDeviceInfo.TYPE_BUILTIN_SPEAKER }
-                }
-                if (target != null) {
-                    communicationDeviceSet = am.setCommunicationDevice(target)
-                    am.mode = AudioManager.MODE_IN_COMMUNICATION
-                }
-            }
-            return
-        }
+        val attrs = AudioAttributes.Builder()
+            .setUsage(AudioAttributes.USAGE_MEDIA)
+            .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
+            .build()
 
-        @Suppress("DEPRECATION")
-        val hasBtHeadset = runCatching {
-            am.getDevices(AudioManager.GET_DEVICES_OUTPUTS).any {
-                it.type == AudioDeviceInfo.TYPE_BLUETOOTH_SCO ||
-                        it.type == AudioDeviceInfo.TYPE_BLUETOOTH_A2DP
-            }
-        }.getOrDefault(false)
+        val request = AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN)
+            .setAudioAttributes(attrs)
+            .setWillPauseWhenDucked(false)
+            .setOnAudioFocusChangeListener { /* half-duplex: реакция не требуется */ }
+            .build()
 
-        @Suppress("DEPRECATION")
-        if (!forceSpeaker && hasBtHeadset && am.isBluetoothScoAvailableOffCall) {
-            runCatching {
-                am.startBluetoothSco()
-                am.isBluetoothScoOn = true
-                bluetoothScoActive = true
-                am.mode = AudioManager.MODE_IN_COMMUNICATION
-            }
-        } else {
-            am.mode = AudioManager.MODE_NORMAL
-            @Suppress("DEPRECATION")
-            am.isSpeakerphoneOn = true
-        }
+        focusRequest = request
+        runCatching { am.requestAudioFocus(request) }
     }
 
-    private fun releaseAudioRouting() {
-        val am = audioManager ?: return
-
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            if (communicationDeviceSet) {
-                runCatching { am.clearCommunicationDevice() }
-                communicationDeviceSet = false
-            }
-            am.mode = AudioManager.MODE_NORMAL
-            return
-        }
-
-        @Suppress("DEPRECATION")
-        run {
-            if (bluetoothScoActive) {
-                runCatching { am.stopBluetoothSco() }
-                am.isBluetoothScoOn = false
-            }
-            am.isSpeakerphoneOn = false
-            am.mode = AudioManager.MODE_NORMAL
-        }
-        bluetoothScoActive = false
-    }
-
-    private val audioFocusListener = AudioManager.OnAudioFocusChangeListener { }
-
-    @Suppress("DEPRECATION")
-    private fun requestAudioFocus() {
-        audioManager?.requestAudioFocus(
-            audioFocusListener,
-            AudioManager.STREAM_VOICE_CALL,
-            AudioManager.AUDIOFOCUS_GAIN_TRANSIENT
-        )
-    }
-
-    @Suppress("DEPRECATION")
     private fun releaseAudioFocus() {
-        audioManager?.abandonAudioFocus(audioFocusListener)
+        val am = audioManager ?: return
+        focusRequest?.let { runCatching { am.abandonAudioFocusRequest(it) } }
+        focusRequest = null
+        am.mode = AudioManager.MODE_NORMAL
     }
 
     private fun buildNotification(): Notification {
@@ -190,8 +138,8 @@ class GeminiLiveForegroundService : Service() {
         )
 
         return NotificationCompat.Builder(this, CHANNEL_ID)
-            .setContentTitle("Gemini Live активен")
-            .setContentText("Голосовой ассистент слушает")
+            .setContentTitle("Голосовой ассистент активен")
+            .setContentText("Микрофон включён")
             .setSmallIcon(android.R.drawable.ic_btn_speak_now)
             .setContentIntent(pendingIntent)
             .addAction(android.R.drawable.ic_media_pause, "Стоп", stopPendingIntent)
@@ -207,7 +155,7 @@ class GeminiLiveForegroundService : Service() {
 
         val channel = NotificationChannel(
             CHANNEL_ID,
-            "AI Assistant",
+            "Голосовой ассистент",
             NotificationManager.IMPORTANCE_LOW
         ).apply {
             description = "Уведомление активной голосовой сессии"
@@ -219,14 +167,12 @@ class GeminiLiveForegroundService : Service() {
     override fun onTaskRemoved(rootIntent: Intent?) {
         super.onTaskRemoved(rootIntent)
         releaseAudioFocus()
-        releaseAudioRouting()
         stopForeground(STOP_FOREGROUND_REMOVE)
         stopSelf()
     }
 
     override fun onDestroy() {
         super.onDestroy()
-        releaseAudioRouting()
         releaseAudioFocus()
     }
 
