@@ -215,6 +215,19 @@ class SessionManager @Inject constructor(
         val silenceMs = (if (settings.vadSilenceTimeoutMs > 0) settings.vadSilenceTimeoutMs
             else settings.vadSilenceDurationMs).coerceAtLeast(500)
 
+        // Описываем функцию для Gemini
+        val dashboardFunction = com.learnde.app.domain.model.FunctionDeclarationConfig(
+            name = "update_dashboard",
+            description = "Выводит важный текст на экран пользователя (в дашборд). Используй это для показа главных мыслей, перевода слов, формул или списков.",
+            parameters = mapOf(
+                "text" to com.learnde.app.domain.model.ParameterConfig(
+                    type = "STRING",
+                    description = "Текст, который нужно показать на экране."
+                )
+            ),
+            required = listOf("text")
+        )
+
         return SessionConfig(
             model = settings.model,
             responseModality = settings.responseModality,
@@ -240,13 +253,17 @@ class SessionManager @Inject constructor(
             compressionTriggerTokens = settings.compressionTriggerTokens,
             compressionTargetTokens = settings.compressionTargetTokens,
             enableGoogleSearch = settings.enableGoogleSearch,
+            functionDeclarations = settings.functionDeclarations + dashboardFunction, // <-- ДОБАВИЛИ ИНСТРУМЕНТ СЮДА
             sendAudioStreamEnd = settings.sendAudioStreamEnd,
         )
     }
 
-    private fun buildSystemInstruction(base: String, prompt: String): String =
-        if (prompt.isBlank()) base
-        else base + "\n\n[Промпт для текущей сессии]:\n" + prompt
+    private fun buildSystemInstruction(base: String, prompt: String): String {
+        val dashboardHint = "\n\nУ тебя есть доступ к экрану пользователя. Если ты объясняешь сложное понятие, переводишь фразу, диктуешь номер или формулу — ОБЯЗАТЕЛЬНО вызывай функцию update_dashboard, чтобы вывести этот текст на экран для наглядности."
+        
+        return if (prompt.isBlank()) base + dashboardHint
+        else base + dashboardHint + "\n\n[Промпт для текущей сессии]:\n" + prompt
+    }
 
     // ───────────────────────── События / orchestrator ─────────────────────────
 
@@ -308,6 +325,35 @@ class SessionManager @Inject constructor(
                     is GeminiEvent.OutputTranscript -> {
                         orchestrator.onModelActivity()
                         appendTranscript(ConversationMessage.ROLE_MODEL, event.text)
+                    }
+
+                    is GeminiEvent.ToolCall -> {
+                        orchestrator.onModelActivity()
+                        val responses = event.functionCalls.map { call ->
+                            if (call.name == "update_dashboard") {
+                                // 1. Достаем текст, который придумала модель
+                                val textToShow = call.args["text"] ?: ""
+                                
+                                // 2. Обновляем UI (Дашборд)
+                                _state.update { it.copy(dashboardText = textToShow) }
+                                
+                                // 3. Формируем успешный ответ для модели
+                                com.learnde.app.domain.ToolResponse(
+                                    name = call.name,
+                                    id = call.id,
+                                    result = """{"success": true}"""
+                                )
+                            } else {
+                                // Если модель вызвала неизвестную функцию
+                                com.learnde.app.domain.ToolResponse(
+                                    name = call.name,
+                                    id = call.id,
+                                    result = """{"error": "Unknown function"}"""
+                                )
+                            }
+                        }
+                        // 4. Отправляем ответ обратно в Gemini, чтобы она продолжила говорить
+                        liveClient.sendToolResponse(responses)
                     }
 
                     else -> Unit
