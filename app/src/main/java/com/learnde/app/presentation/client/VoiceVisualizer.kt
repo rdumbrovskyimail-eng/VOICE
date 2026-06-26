@@ -68,7 +68,7 @@ fun VoiceVisualizer(
 
             // Внешнее свечение — несколько слоёв вместо blur.
             for (i in 3 downTo 1) {
-                val rr = r * (1f + i * 0.22f)
+                val rr = (r * (1f + i * 0.22f)).coerceAtLeast(0.1f)
                 val a = (0.10f * i * (0.5f + reactive)).coerceIn(0f, 0.6f)
                 drawCircle(
                     brush = Brush.radialGradient(
