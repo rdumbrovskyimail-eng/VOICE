@@ -86,7 +86,7 @@ data class AppSettings(
     val vadStartOfSpeechSensitivity: Float = 0.5f,
     val vadEndOfSpeechSensitivity: Float = 0.5f,
     val vadSilenceTimeoutMs: Int = 0,     // если >0 — переопределяет vadSilenceDurationMs.
-    val activityHandling: String = "NO_INTERRUPTION", // half-duplex: AI договаривает фразу.
+    val activityHandling: String = "", // Пустая строка включает дефолтное поведение (Barge-in разрешен)
 
     // ─────────── Транскрипция (нужна для чата) ───────────
     val inputTranscription: Boolean = true,
