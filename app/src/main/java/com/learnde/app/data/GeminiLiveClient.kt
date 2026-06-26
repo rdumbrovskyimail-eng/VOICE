@@ -180,6 +180,7 @@ class GeminiLiveClient(
                 logger.e("WS failure$status: ${t.message}")
                 cancelSetupWatchdog()
                 isReady = false
+                webSocket = null
                 closeCompletion?.complete(Unit)
                 _events.tryEmit(GeminiEvent.ConnectionError(t.message ?: "Unknown error"))
             }
@@ -567,7 +568,7 @@ class GeminiLiveClient(
 
             root["sessionResumptionUpdate"]?.jsonObject?.let { update ->
                 val resumable = update["resumable"]?.jsonPrimitive?.booleanOrNull ?: false
-                val token = update["token"]?.jsonPrimitive?.content
+                val token = update["newHandle"]?.jsonPrimitive?.content ?: update["token"]?.jsonPrimitive?.content
                 val lastConsumed = update["lastConsumedClientMessageIndex"]
                     ?.jsonPrimitive?.longOrNull
 
