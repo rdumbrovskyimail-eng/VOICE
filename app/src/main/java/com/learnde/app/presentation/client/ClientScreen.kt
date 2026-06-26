@@ -2,9 +2,13 @@ package com.learnde.app.presentation.client
 
 import android.Manifest
 import android.content.pm.PackageManager
+import android.net.Uri
 import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.material.icons.filled.AttachFile
+import androidx.compose.material.icons.filled.InsertDriveFile
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -61,6 +65,14 @@ fun ClientScreen(
     var promptText by remember { mutableStateOf("") }
     var chatInput by remember { mutableStateOf("") }
     var showPromptSuccess by remember { mutableStateOf(false) }
+    var promptAttachments by remember { mutableStateOf<List<Uri>>(emptyList()) }
+    var chatAttachments by remember { mutableStateOf<List<Uri>>(emptyList()) }
+    val promptPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { u ->
+        promptAttachments = (promptAttachments + u).distinct().take(20)
+    }
+    val chatPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { u ->
+        chatAttachments = (chatAttachments + u).distinct().take(20)
+    }
 
     LaunchedEffect(state.activePrompt) {
         if (state.activePrompt.isNotEmpty() && promptText.isEmpty()) {
@@ -111,7 +123,8 @@ fun ClientScreen(
                     value = promptText,
                     onValueChange = { promptText = it },
                     onApply = {
-                        viewModel.applyPrompt(promptText.trim())
+                        viewModel.applyPrompt(promptText.trim(), promptAttachments)
+                        promptAttachments = emptyList()
                         scope.launch {
                             showPromptSuccess = true
                             delay(2500)
@@ -164,31 +177,35 @@ fun ClientScreen(
             }
 
             // 5. BOTTOM AREA: WAVES + INPUT
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(140.dp), // Высота зоны волн
-                contentAlignment = Alignment.BottomCenter
-            ) {
-                // Волны на заднем фоне
-                GeminiWaves(
-                    amplitude = amplitude,
-                    isActive = state.isConnected || state.isConnecting,
-                    modifier = Modifier.fillMaxSize()
-                )
-
-                // Поле ввода и микрофон поверх волн
-                InputRow(
-                    value = chatInput,
-                    onValueChange = { chatInput = it },
-                    onSend = {
-                        viewModel.sendText(chatInput)
-                        chatInput = ""
-                    },
-                    isMicActive = state.isMicActive,
-                    onToggleMic = { onToggleMic() },
-                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 16.dp)
-                )
+            Column(modifier = Modifier.fillMaxWidth()) {
+                if (chatAttachments.isNotEmpty()) {
+                    AttachmentChips(chatAttachments) { chatAttachments = chatAttachments - it }
+                }
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(140.dp),
+                    contentAlignment = Alignment.BottomCenter
+                ) {
+                    GeminiWaves(
+                        amplitude = amplitude,
+                        isActive = state.isConnected || state.isConnecting,
+                        modifier = Modifier.fillMaxSize()
+                    )
+                    InputRow(
+                        value = chatInput,
+                        onValueChange = { chatInput = it },
+                        onAttach = { chatPicker.launch(arrayOf("*/*")) },
+                        onSend = {
+                            viewModel.sendText(chatInput, chatAttachments)
+                            chatInput = ""
+                            chatAttachments = emptyList()
+                        },
+                        isMicActive = state.isMicActive,
+                        onToggleMic = { onToggleMic() },
+                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 16.dp)
+                    )
+                }
             }
         }
     }
@@ -272,14 +289,24 @@ private fun MessageBubble(msg: ConversationMessage, prefs: ChatPrefs, timeFormat
                 .background(if (isUser) AccentBlue.copy(alpha = 0.2f) else SurfaceCtrl.copy(alpha = 0.8f))
                 .padding(horizontal = 14.dp, vertical = 10.dp)
         ) {
-            Text(msg.text, color = Color(0xFFF0F1F3), fontSize = (15 * prefs.fontScale).sp, lineHeight = 22.sp)
+            Column {
+                if (msg.text.isNotEmpty())
+                    Text(msg.text, color = Color(0xFFF0F1F3), fontSize = (15 * prefs.fontScale).sp, lineHeight = 22.sp)
+                if (msg.attachmentNote != null) {
+                    if (msg.text.isNotEmpty()) Spacer(Modifier.height(6.dp))
+                    Text(msg.attachmentNote, color = Color(0xFFF0F1F3).copy(alpha = 0.75f), fontSize = (12 * prefs.fontScale).sp)
+                }
+            }
         }
     }
 }
 
 @Composable
-private fun InputRow(value: String, onValueChange: (String) -> Unit, onSend: () -> Unit, isMicActive: Boolean, onToggleMic: () -> Unit, modifier: Modifier = Modifier) {
+private fun InputRow(value: String, onValueChange: (String) -> Unit, onAttach: () -> Unit, onSend: () -> Unit, isMicActive: Boolean, onToggleMic: () -> Unit, modifier: Modifier = Modifier) {
     Row(modifier = modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+        IconButton(onClick = onAttach, modifier = Modifier.size(48.dp)) {
+            Icon(Icons.Filled.AttachFile, contentDescription = "Прикрепить", tint = TextDim)
+        }
         OutlinedTextField(
             value = value,
             onValueChange = onValueChange,
@@ -316,3 +343,33 @@ private fun darkFieldColors() = OutlinedTextFieldDefaults.colors(
     cursorColor = AccentBlue, focusedBorderColor = AccentBlue, unfocusedBorderColor = Color(0x33FFFFFF),
     focusedContainerColor = Color(0xFF131519), unfocusedContainerColor = Color(0xFF131519),
 )
+
+@Composable
+private fun AttachmentChips(uris: List<Uri>, onRemove: (Uri) -> Unit) {
+    val ctx = LocalContext.current
+    LazyRow(Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 6.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        items(uris, key = { it.toString() }) { uri ->
+            val name = remember(uri) { fileLabel(ctx, uri) }
+            Row(
+                Modifier.clip(RoundedCornerShape(10.dp)).background(SurfaceCtrl)
+                    .padding(start = 10.dp, end = 6.dp, top = 6.dp, bottom = 6.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Icon(Icons.Filled.InsertDriveFile, null, tint = AccentBlue, modifier = Modifier.size(15.dp))
+                Spacer(Modifier.width(6.dp))
+                Text(name, color = Color.White, fontSize = 12.sp, maxLines = 1,
+                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis, modifier = Modifier.widthIn(max = 130.dp))
+                Spacer(Modifier.width(2.dp))
+                IconButton(onClick = { onRemove(uri) }, modifier = Modifier.size(20.dp)) {
+                    Icon(Icons.Filled.Close, "Убрать", tint = TextDim, modifier = Modifier.size(13.dp))
+                }
+            }
+        }
+    }
+}
+
+private fun fileLabel(ctx: android.content.Context, uri: Uri): String = runCatching {
+    ctx.contentResolver.query(uri, arrayOf(android.provider.OpenableColumns.DISPLAY_NAME), null, null, null)?.use {
+        if (it.moveToFirst()) it.getString(0) else null
+    }
+}.getOrNull() ?: uri.lastPathSegment ?: "файл"
