@@ -22,6 +22,8 @@ interface LiveClient {
 
     fun sendVideoFrame(jpegBytes: ByteArray)
 
+    fun sendClientTurn(text: String, jpegImages: List<ByteArray>, turnComplete: Boolean = true)
+
     fun sendAudioStreamEnd()
 
     fun sendToolResponse(responses: List<ToolResponse>)
