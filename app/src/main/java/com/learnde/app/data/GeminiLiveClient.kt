@@ -477,6 +477,35 @@ class GeminiLiveClient(
         webSocket?.send(raw)
     }
 
+    override fun sendClientTurn(text: String, jpegImages: List<ByteArray>, turnComplete: Boolean) {
+        if (!isReady) return
+        val msg = buildJsonObject {
+            put("clientContent", buildJsonObject {
+                put("turns", buildJsonArray {
+                    add(buildJsonObject {
+                        put("role", "user")
+                        put("parts", buildJsonArray {
+                            if (text.isNotBlank()) add(buildJsonObject { put("text", text) })
+                            for (img in jpegImages) {
+                                add(buildJsonObject {
+                                    put("inlineData", buildJsonObject {
+                                        put("mimeType", "image/jpeg")
+                                        put("data", Base64.encodeToString(img, Base64.NO_WRAP))
+                                    })
+                                })
+                            }
+                        })
+                    })
+                })
+                put("turnComplete", turnComplete)
+            })
+        }
+        val raw = msg.toString()
+        logger.d("CLIENT_TURN → text=${text.length} imgs=${jpegImages.size} (${raw.length} chars)")
+        trackSentFrame(raw)
+        webSocket?.send(raw)
+    }
+
     override fun sendVideoFrame(jpegBytes: ByteArray) {
         if (!isReady) return
         val b64 = Base64.encodeToString(jpegBytes, Base64.NO_WRAP)
