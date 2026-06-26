@@ -71,7 +71,7 @@ class SessionManager @Inject constructor(
         private const val MAX_MSGS = 80
         private const val AMP_DECAY = 0.82f       // плавное затухание орба
         private const val AMP_TICK_MS = 60L
-        private const val VIS_GAIN = 6.5f         // речь тихая по RMS → усиливаем для визуализации
+        private const val VIS_GAIN = 3.5f         // речь тихая по RMS → усиливаем для визуализации
     }
 
     private val appScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
@@ -82,15 +82,9 @@ class SessionManager @Inject constructor(
     private val _amplitude = MutableStateFlow(0f)
     val amplitude: StateFlow<Float> = _amplitude.asStateFlow()
 
-    private var micJob: Job? = null
-
-    // Роль текущего «потокового» сообщения транскрипции (для склейки кусков в один пузырь).
-    private var streamingRole: String? = null
-
-    // Последний применённый промпт (используется при reconnect / toggle).
-    private var activePrompt: String = ""
-
-    // Слать ли audioStreamEnd при остановке мика (настройка sendAudioStreamEnd).
+    @Volatile private var micJob: Job? = null
+    @Volatile private var streamingRole: String? = null
+    @Volatile private var activePrompt: String = ""
     @Volatile private var sendStreamEndOnStop: Boolean = true
 
     init {
@@ -130,7 +124,8 @@ class SessionManager @Inject constructor(
         if (t.isEmpty() || !liveClient.isReady) return
         streamingRole = null
         addFinalMessage(ConversationMessage.user(t))
-        liveClient.sendText(t)
+        liveClient.sendRealtimeText(t)
+        orchestrator.onUserTurnEnded()
     }
 
     fun toggleMic() {
@@ -216,9 +211,8 @@ class SessionManager @Inject constructor(
             .getOrDefault(LatencyProfile.Low)
 
         // Если задан явный таймаут тишины (>0) — он переопределяет рекомендованный.
-        val silenceMs =
-            if (settings.vadSilenceTimeoutMs > 0) settings.vadSilenceTimeoutMs
-            else settings.vadSilenceDurationMs
+        val silenceMs = (if (settings.vadSilenceTimeoutMs > 0) settings.vadSilenceTimeoutMs
+            else settings.vadSilenceDurationMs).coerceAtLeast(500)
 
         return SessionConfig(
             model = settings.model,
@@ -290,6 +284,7 @@ class SessionManager @Inject constructor(
                         _state.update { it.copy(error = event.message) }
 
                     is GeminiEvent.AudioChunk -> {
+                        orchestrator.onModelActivity()
                         _state.update { it.copy(isAiSpeaking = true) }
                         audioEngine.enqueuePlayback(event.pcmData)
                     }
@@ -309,8 +304,10 @@ class SessionManager @Inject constructor(
                     is GeminiEvent.InputTranscript ->
                         appendTranscript(ConversationMessage.ROLE_USER, event.text)
 
-                    is GeminiEvent.OutputTranscript ->
+                    is GeminiEvent.OutputTranscript -> {
+                        orchestrator.onModelActivity()
                         appendTranscript(ConversationMessage.ROLE_MODEL, event.text)
+                    }
 
                     else -> Unit
                 }
@@ -342,12 +339,15 @@ class SessionManager @Inject constructor(
 
     private fun startMic() {
         if (_state.value.isMicActive) return
-        _state.update { it.copy(isMicActive = true) }
         micJob = appScope.launch {
-            audioEngine.startCapture()
+            val started = runCatching { audioEngine.startCapture() }.isSuccess
+            if (!started || !audioEngine.isCapturing) {
+                logger.e("startCapture failed — mic not activated")
+                return@launch
+            }
+            _state.update { it.copy(isMicActive = true) }
             audioEngine.micOutput.collect { chunk ->
-                // half-duplex: пока слышен AI — мик не отправляем (гасим эхо).
-                if (System.currentTimeMillis() > audioEngine.playbackAudibleUntilMs) {
+                if (System.currentTimeMillis() > audioEngine.playbackAudibleUntilMs + 400L) {
                     liveClient.sendAudio(chunk)
                     if (!_state.value.isAiSpeaking) pushLevel(visLevel(rms(chunk)))
                 }
@@ -360,7 +360,10 @@ class SessionManager @Inject constructor(
         micJob = null
         appScope.launch {
             audioEngine.stopCapture()
-            if (sendStreamEndOnStop && liveClient.isReady) liveClient.sendAudioStreamEnd()
+            if (sendStreamEndOnStop && liveClient.isReady) {
+                liveClient.sendAudioStreamEnd()
+                orchestrator.onUserTurnEnded()
+            }
             _state.update { it.copy(isMicActive = false) }
         }
     }
