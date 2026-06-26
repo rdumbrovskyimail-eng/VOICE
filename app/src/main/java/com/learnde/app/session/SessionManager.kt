@@ -75,7 +75,7 @@ class SessionManager @Inject constructor(
         private const val VIS_GAIN = 3.5f         // речь тихая по RMS → усиливаем для визуализации
     }
 
-    private val appScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+    private val appScope = CoroutineScope(SupervisorJob() + Dispatchers.Default + kotlinx.coroutines.CoroutineExceptionHandler { _, e -> logger.e("appScope uncaught (проглочено, без краша): ${e.message}", e) })
 
     private val _state = MutableStateFlow(State())
     val state: StateFlow<State> = _state.asStateFlow()
