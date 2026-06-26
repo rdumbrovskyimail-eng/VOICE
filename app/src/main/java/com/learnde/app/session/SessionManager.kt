@@ -133,6 +133,16 @@ class SessionManager @Inject constructor(
         if (_state.value.isMicActive) stopMic() else startMic()
     }
 
+    /** Скрыть/очистить табло (крестик в карточке дашборда). */
+    fun clearDashboard() {
+        _state.update { it.copy(dashboardText = "") }
+    }
+
+    /** Сбросить ошибку после показа в Snackbar. */
+    fun clearError() {
+        _state.update { it.copy(error = null) }
+    }
+
     fun shutdown() {
         appScope.launch { stopInternal() }
     }
