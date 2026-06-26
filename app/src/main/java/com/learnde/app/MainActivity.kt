@@ -35,8 +35,10 @@ class MainActivity : ComponentActivity() {
                             ClientScreen(navController = navController)
                         }
                         composable(Routes.SETTINGS) {
-                            // Заглушка для экрана настроек. 
-                            // Если у вас есть SettingsScreen, добавьте его сюда.
+                            // Вызываем наш новый экран настроек
+                            com.learnde.app.presentation.settings.SettingsScreen(
+                                onBack = { navController.popBackStack() }
+                            )
                         }
                     }
                 }
