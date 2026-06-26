@@ -52,4 +52,6 @@ class ClientViewModel @Inject constructor(
     fun toggleConnection() = session.toggleConnection()
     fun sendText(text: String) = session.sendText(text)
     fun toggleMic() = session.toggleMic()
+    fun clearDashboard() = session.clearDashboard()
+    fun clearError() = session.clearError()
 }
