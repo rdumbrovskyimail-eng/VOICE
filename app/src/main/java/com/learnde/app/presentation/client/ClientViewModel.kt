@@ -48,9 +48,9 @@ class ClientViewModel @Inject constructor(
         }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), ChatPrefs())
 
-    fun applyPrompt(prompt: String) = session.applyPrompt(prompt)
+    fun applyPrompt(prompt: String, attachments: List<android.net.Uri> = emptyList()) = session.applyPrompt(prompt, attachments)
     fun toggleConnection() = session.toggleConnection()
-    fun sendText(text: String) = session.sendText(text)
+    fun sendText(text: String, attachments: List<android.net.Uri> = emptyList()) = session.sendText(text, attachments)
     fun toggleMic() = session.toggleMic()
     fun clearDashboard() = session.clearDashboard()
     fun clearError() = session.clearError()
