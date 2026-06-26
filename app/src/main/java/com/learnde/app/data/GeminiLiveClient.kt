@@ -1,3 +1,13 @@
+// Путь: app/src/main/java/com/learnde/app/data/GeminiLiveClient.kt
+//
+// Изменение относительно исходной версии — ТОЛЬКО блок contextWindowCompression в buildFullSetup:
+//   Было: либо triggerTokens, либо slidingWindow.targetTokens (either/or) и только если токены > 0
+//         → при дефолтных 0 конфиг вообще НЕ эмитился, сессия упиралась в лимит ~15 минут.
+//   Стало: всегда (если enableContextCompression) эмитятся ОБА поля как siblings —
+//         triggerTokens (когда сжимать) И slidingWindow.targetTokens (до скольки сжимать),
+//         с рабочими дефолтами 25600 / 8192, если в конфиге 0.
+// Всё остальное идентично исходнику.
+
 package com.learnde.app.data
 
 import android.util.Base64
@@ -354,17 +364,26 @@ class GeminiLiveClient(
                     })
                 }
 
-                if (config.enableContextCompression &&
-                    (config.compressionTriggerTokens > 0L || config.compressionTargetTokens > 0L)
-                ) {
+                // ─────────────────────────────────────────────────────────────
+                // ★ ИСПРАВЛЕННЫЙ БЛОК СЖАТИЯ КОНТЕКСТА.
+                // Эмитим оба поля одновременно (siblings), как требует Live API:
+                //   triggerTokens          — порог, при котором запускается сжатие;
+                //   slidingWindow.targetTokens — до какого размера сжимать историю.
+                // Дефолты 25600 / 8192 применяются, если в конфиге стоит 0.
+                // Это снимает лимит сессии ~15 минут.
+                // ─────────────────────────────────────────────────────────────
+                if (config.enableContextCompression) {
+                    val triggerTokens =
+                        if (config.compressionTriggerTokens > 0L) config.compressionTriggerTokens
+                        else 25_600L
+                    val targetTokens =
+                        if (config.compressionTargetTokens > 0L) config.compressionTargetTokens
+                        else 8_192L
                     put("contextWindowCompression", buildJsonObject {
-                        if (config.compressionTargetTokens > 0L) {
-                            put("slidingWindow", buildJsonObject {
-                                put("targetTokens", config.compressionTargetTokens)
-                            })
-                        } else {
-                            put("triggerTokens", config.compressionTriggerTokens)
-                        }
+                        put("triggerTokens", triggerTokens)
+                        put("slidingWindow", buildJsonObject {
+                            put("targetTokens", targetTokens)
+                        })
                     })
                 }
             })
