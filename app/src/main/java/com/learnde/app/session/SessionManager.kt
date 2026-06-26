@@ -53,6 +53,7 @@ class SessionManager @Inject constructor(
     private val audioEngine: AudioEngine,
     private val orchestrator: ConnectionOrchestrator,
     private val settingsStore: DataStore<AppSettings>,
+    private val attachmentProcessor: com.learnde.app.attach.AttachmentProcessor,
     private val logger: AppLogger,
 ) {
 
@@ -86,6 +87,7 @@ class SessionManager @Inject constructor(
     @Volatile private var micJob: Job? = null
     @Volatile private var streamingRole: String? = null
     @Volatile private var activePrompt: String = ""
+    @Volatile private var pendingPromptAttachments: List<android.net.Uri> = emptyList()
     @Volatile private var sendStreamEndOnStop: Boolean = true
 
     init {
@@ -99,15 +101,14 @@ class SessionManager @Inject constructor(
     // ───────────────────────── Публичный API ─────────────────────────
 
     /** Применить промпт со страниц учебника. Если сессия активна — пересоздаёт её с новым заданием. */
-    fun applyPrompt(prompt: String) {
+    fun applyPrompt(prompt: String, attachments: List<android.net.Uri> = emptyList()) {
         appScope.launch {
             activePrompt = prompt
+            pendingPromptAttachments = attachments
             _state.update { it.copy(activePrompt = prompt) }
             val s = _state.value
-            if (s.isConnected || s.isConnecting) {
-                stopInternal()
-                startInternal(prompt)
-            }
+            if (s.isConnected || s.isConnecting) { stopInternal(); startInternal(prompt) }
+            else if (attachments.isNotEmpty()) startInternal(prompt) // поднимаемся, чтобы засеять файлы
         }
     }
 
@@ -120,13 +121,59 @@ class SessionManager @Inject constructor(
     }
 
     /** Отправить текстовое сообщение — модель «прочитает» его как SMS и ответит голосом. */
-    fun sendText(text: String) {
+    fun sendText(text: String, attachments: List<android.net.Uri> = emptyList()) {
         val t = text.trim()
-        if (t.isEmpty() || !liveClient.isReady) return
+        if ((t.isEmpty() && attachments.isEmpty()) || !liveClient.isReady) return
         streamingRole = null
-        addFinalMessage(ConversationMessage.user(t))
-        liveClient.sendRealtimeText(t)
-        orchestrator.onUserTurnEnded()
+        appScope.launch {
+            if (attachments.isEmpty()) {
+                addFinalMessage(ConversationMessage.user(t))
+                liveClient.sendRealtimeText(t)
+                orchestrator.onUserTurnEnded()
+                return@launch
+            }
+            val r = attachmentProcessor.process(attachments)
+            if (r.images.isEmpty() && r.extractedText.isEmpty() && t.isEmpty()) {
+                _state.update { it.copy(error = "Не удалось прочитать: " + r.skipped.joinToString(", ")) }
+                return@launch
+            }
+            val composed = buildString {
+                if (t.isNotEmpty()) append(t)
+                if (r.extractedText.isNotEmpty()) { if (isNotEmpty()) append("\n"); append(r.extractedText) }
+                if (isEmpty()) append("Посмотри на прикреплённые файлы и помоги.")
+            }
+            liveClient.sendClientTurn(composed, r.images, turnComplete = true)
+            addFinalMessage(
+                ConversationMessage.user(t.ifEmpty { "📎 Вложения" }).copy(attachmentNote = buildAttachNote(r))
+            )
+            orchestrator.onUserTurnEnded()
+        }
+    }
+
+    private fun buildAttachNote(r: com.learnde.app.attach.AttachmentProcessor.Result): String? {
+        val parts = ArrayList<String>()
+        if (r.accepted.isNotEmpty()) parts.add("📎 " + r.accepted.joinToString(", "))
+        if (r.skipped.isNotEmpty()) parts.add("⚠ не поддержано: " + r.skipped.joinToString(", "))
+        return parts.joinToString(" · ").ifEmpty { null }
+    }
+
+    private fun flushPromptAttachments() {
+        val uris = pendingPromptAttachments
+        if (uris.isEmpty()) return
+        pendingPromptAttachments = emptyList()  // сеем один раз, не на каждый реконнект
+        appScope.launch {
+            val r = attachmentProcessor.process(uris)
+            if (r.images.isEmpty() && r.extractedText.isEmpty()) {
+                _state.update { it.copy(error = "Файлы промпта не прочитаны: " + r.skipped.joinToString(", ")) }
+                return@launch
+            }
+            val framing = buildString {
+                append("Это материалы для текущей сессии. Изучи их и кратко подтверди, что ознакомился.")
+                if (r.extractedText.isNotEmpty()) { append("\n"); append(r.extractedText) }
+            }
+            liveClient.sendClientTurn(framing, r.images, turnComplete = true)
+            addFinalMessage(ConversationMessage.user("📎 Материалы сессии").copy(attachmentNote = buildAttachNote(r)))
+        }
     }
 
     fun toggleMic() {
@@ -290,15 +337,12 @@ class SessionManager @Inject constructor(
     private fun observeLinkState() {
         appScope.launch {
             orchestrator.state.collect { link ->
-                _state.update {
-                    it.copy(
-                        link = link,
-                        isConnected = link == LinkState.READY,
-                        isConnecting = link == LinkState.CONNECTING ||
-                                link == LinkState.RECOVERING ||
-                                link == LinkState.ROTATING,
-                    )
-                }
+                _state.update { it.copy(
+                    link = link,
+                    isConnected = link == LinkState.READY,
+                    isConnecting = link == LinkState.CONNECTING || link == LinkState.RECOVERING || link == LinkState.ROTATING,
+                ) }
+                if (link == LinkState.READY) flushPromptAttachments()
             }
         }
     }
