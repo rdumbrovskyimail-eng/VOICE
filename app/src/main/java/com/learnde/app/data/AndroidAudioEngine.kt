@@ -21,7 +21,10 @@ import com.learnde.app.domain.AudioEngine
 import com.learnde.app.domain.model.SessionConfig
 import javax.inject.Inject
 import com.learnde.app.util.AppLogger
+import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
@@ -79,6 +82,8 @@ class AndroidAudioEngine @Inject constructor(
     @Volatile private var echoCanceler: AcousticEchoCanceler? = null
     @Volatile private var noiseSuppressor: NoiseSuppressor? = null
     @Volatile private var audioTrack: AudioTrack? = null
+    private val trackLock = Any()
+    private val captureLifecycleMutex = Mutex()
 
     private var playbackChannel: Channel<ByteArray> =
         Channel(500, BufferOverflow.DROP_OLDEST)
@@ -92,7 +97,7 @@ class AndroidAudioEngine @Inject constructor(
     override val playbackAudibleUntilMs: Long get() = audibleUntilMs
 
     private fun newEngineScope(): CoroutineScope =
-        CoroutineScope(SupervisorJob() + Dispatchers.IO)
+        CoroutineScope(SupervisorJob() + Dispatchers.IO + CoroutineExceptionHandler { _, e -> logger.e("engineScope uncaught: ${e.message}", e) })
 
     override fun updateJitterConfig(preBufferChunks: Int, timeoutMs: Long, queueCapacity: Int) {
         jitterPreBufferChunks = preBufferChunks.coerceIn(1, 10)
@@ -119,10 +124,10 @@ class AndroidAudioEngine @Inject constructor(
     }
 
     @Suppress("MissingPermission")
-    override suspend fun startCapture() {
+    override suspend fun startCapture() = captureLifecycleMutex.withLock {
         if (isCapturing) {
             logger.d("startCapture skipped — already capturing")
-            return
+            return@withLock
         }
         if (!engineScope.isActive) engineScope = newEngineScope()
 
@@ -242,8 +247,8 @@ class AndroidAudioEngine @Inject constructor(
         }
     }
 
-    override suspend fun stopCapture() {
-        if (!isCapturing && audioRecord == null) return
+    override suspend fun stopCapture() = captureLifecycleMutex.withLock {
+        if (!isCapturing && audioRecord == null) return@withLock
         isCapturing = false
 
         val rec = audioRecord
@@ -334,12 +339,12 @@ class AndroidAudioEngine @Inject constructor(
                         }
                         for (buffered in preBuffer) {
                             _playbackSync.tryEmit(buffered)
-                            runCatching { track.write(buffered, 0, buffered.size) }
+                            synchronized(trackLock) { runCatching { track.write(buffered, 0, buffered.size) } }
                         }
                         isFirstBatch = false
                     } else {
                         _playbackSync.tryEmit(chunk)
-                        runCatching { track.write(chunk, 0, chunk.size) }
+                        synchronized(trackLock) { runCatching { track.write(chunk, 0, chunk.size) } }
                     }
                     if (awaitingDrain && playbackChannel.isEmpty) {
                         awaitingDrain = false
@@ -376,10 +381,12 @@ class AndroidAudioEngine @Inject constructor(
         awaitingDrain = false
         estimatedPlaybackEndMs = 0L
         audibleUntilMs = 0L
-        audioTrack?.apply {
-            runCatching { 
-                if (state == AudioTrack.STATE_INITIALIZED) {
-                    pause(); flush(); play() 
+        synchronized(trackLock) {
+            audioTrack?.apply {
+                runCatching { 
+                    if (state == AudioTrack.STATE_INITIALIZED) {
+                        pause(); flush(); play() 
+                    }
                 }
             }
         }
@@ -387,11 +394,9 @@ class AndroidAudioEngine @Inject constructor(
 
     override suspend fun onTurnComplete() {
         awaitingDrain = true
-        runCatching {
-            val padMs = 120
-            val silence = ByteArray((SessionConfig.OUTPUT_SAMPLE_RATE * 2 * padMs) / 1000)
-            audioTrack?.write(silence, 0, silence.size)
-        }
+        val padMs = 120
+        val silence = ByteArray((SessionConfig.OUTPUT_SAMPLE_RATE * 2 * padMs) / 1000)
+        playbackChannel.trySend(silence)
     }
 
     override suspend fun releaseAll() {
@@ -405,10 +410,12 @@ class AndroidAudioEngine @Inject constructor(
             withTimeoutOrNull(800L) { playbackJob?.cancelAndJoin() }
         }
         playbackJob = null
-        audioTrack?.let {
-            runCatching { it.pause(); it.flush(); it.stop(); it.release() }
+        synchronized(trackLock) {
+            audioTrack?.let {
+                runCatching { it.pause(); it.flush(); it.stop(); it.release() }
+            }
+            audioTrack = null
         }
-        audioTrack = null
         runCatching {
             withTimeoutOrNull(800L) { engineScope.coroutineContext[Job]?.cancelAndJoin() }
         }
