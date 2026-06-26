@@ -47,8 +47,8 @@ data class AppSettings(
     val responseModality: String = "AUDIO",
 
     // ─────────── Голос ───────────
-    // Sulafat = "Warm" (тёплый, естественный). Приятный универсальный голос для ассистента.
-    val voiceId: String = "Sulafat",
+    // Puck = "Warm" (тёплый, естественный). Приятный универсальный голос для ассистента.
+    val voiceId: String = "Puck",
 
     // ─────────── Аудио-движок ───────────
     val useAec: Boolean = true,

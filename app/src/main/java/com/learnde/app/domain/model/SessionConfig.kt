@@ -40,7 +40,7 @@ data class SessionConfig(
     val vadEndSensitivity: String = "END_SENSITIVITY_LOW",
     val vadPrefixPaddingMs: Int = 300,
     val vadSilenceDurationMs: Int = 800,
-    val activityHandling: String = "NO_INTERRUPTION",
+    val activityHandling: String = "",
     val systemInstruction: String = DEFAULT_SYSTEM_INSTRUCTION,
     val inputTranscription: Boolean = true,
     val outputTranscription: Boolean = true,

@@ -81,7 +81,7 @@ class AndroidAudioEngine @Inject constructor(
     @Volatile private var audioTrack: AudioTrack? = null
 
     private var playbackChannel: Channel<ByteArray> =
-        Channel(Channel.UNLIMITED)
+        Channel(500, BufferOverflow.DROP_OLDEST)
 
     @Volatile private var isFirstBatch = true
     @Volatile private var awaitingDrain = false
@@ -204,40 +204,14 @@ class AndroidAudioEngine @Inject constructor(
             val byteBuffer = ByteBuffer.allocate(minBuf * 2).order(ByteOrder.LITTLE_ENDIAN)
             val rawBytes = byteBuffer.array()
 
-            var rollingPeak = 4000
-            val targetPeak = 24000
-            val agcAttack = 0.4f
-            val agcRelease = 0.015f
-            val agcMaxBoost = 2.5f
-            val agcMinBoost = 0.6f
-            val noiseFloor = 900
-
             try {
                 val shortBuffer = byteBuffer.asShortBuffer()
                 while (isActive && isCapturing) {
                     val read = recorder.read(buffer, 0, buffer.size)
                     when {
                         read > 0 -> {
-                            var localPeak = 0
                             for (i in 0 until read) {
-                                val v = kotlin.math.abs(buffer[i].toInt())
-                                if (v > localPeak) localPeak = v
-                            }
-
-                            rollingPeak = if (localPeak > rollingPeak) {
-                                (rollingPeak + (localPeak - rollingPeak) * agcAttack).toInt()
-                            } else {
-                                (rollingPeak - (rollingPeak - localPeak) * agcRelease).toInt()
-                            }
-                            if (rollingPeak < noiseFloor) rollingPeak = noiseFloor
-
-                            val agcGain = (targetPeak.toFloat() / rollingPeak.toFloat())
-                                .coerceIn(agcMinBoost, agcMaxBoost)
-
-                            val finalGain = agcGain * micGain
-
-                            for (i in 0 until read) {
-                                val amplified = (buffer[i] * finalGain).toInt()
+                                val amplified = (buffer[i] * micGain).toInt()
                                 buffer[i] = when {
                                     amplified > Short.MAX_VALUE -> Short.MAX_VALUE
                                     amplified < Short.MIN_VALUE -> Short.MIN_VALUE
@@ -303,7 +277,7 @@ class AndroidAudioEngine @Inject constructor(
         }
         if (!engineScope.isActive) engineScope = newEngineScope()
         if (playbackChannel.isClosedForSend) {
-            playbackChannel = Channel(Channel.UNLIMITED)
+            playbackChannel = Channel(500, BufferOverflow.DROP_OLDEST)
         }
 
         val sampleRate = SessionConfig.OUTPUT_SAMPLE_RATE

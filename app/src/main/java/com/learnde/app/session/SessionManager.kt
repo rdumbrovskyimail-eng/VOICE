@@ -329,31 +329,26 @@ class SessionManager @Inject constructor(
 
                     is GeminiEvent.ToolCall -> {
                         orchestrator.onModelActivity()
-                        val responses = event.functionCalls.map { call ->
-                            if (call.name == "update_dashboard") {
-                                // 1. Достаем текст, который придумала модель
-                                val textToShow = call.args["text"] ?: ""
-                                
-                                // 2. Обновляем UI (Дашборд)
-                                _state.update { it.copy(dashboardText = textToShow) }
-                                
-                                // 3. Формируем успешный ответ для модели
-                                com.learnde.app.domain.ToolResponse(
-                                    name = call.name,
-                                    id = call.id,
-                                    result = """{"success": true}"""
-                                )
-                            } else {
-                                // Если модель вызвала неизвестную функцию
-                                com.learnde.app.domain.ToolResponse(
-                                    name = call.name,
-                                    id = call.id,
-                                    result = """{"error": "Unknown function"}"""
-                                )
+                        appScope.launch {
+                            val responses = event.functionCalls.map { call ->
+                                if (call.name == "update_dashboard") {
+                                    val textToShow = call.args["text"] ?: ""
+                                    _state.update { it.copy(dashboardText = textToShow) }
+                                    com.learnde.app.domain.ToolResponse(
+                                        name = call.name,
+                                        id = call.id,
+                                        result = """{"success": true}"""
+                                    )
+                                } else {
+                                    com.learnde.app.domain.ToolResponse(
+                                        name = call.name,
+                                        id = call.id,
+                                        result = """{"error": "Unknown function"}"""
+                                    )
+                                }
                             }
+                            liveClient.sendToolResponse(responses)
                         }
-                        // 4. Отправляем ответ обратно в Gemini, чтобы она продолжила говорить
-                        liveClient.sendToolResponse(responses)
                     }
 
                     else -> Unit

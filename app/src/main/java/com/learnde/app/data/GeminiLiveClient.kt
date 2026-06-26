@@ -549,12 +549,10 @@ class GeminiLiveClient(
                 cancelSetupWatchdog()
                 isReady = true
                 _events.tryEmit(GeminiEvent.SetupComplete)
-                return
             }
 
             root["toolCall"]?.jsonObject?.let { toolCall ->
                 parseToolCall(toolCall)
-                return
             }
 
             root["toolCallCancellation"]?.jsonObject?.let { cancellation ->
@@ -563,7 +561,6 @@ class GeminiLiveClient(
                     ?: emptyList()
                 logger.d("TOOL_CALL_CANCELLATION: $ids")
                 _events.tryEmit(GeminiEvent.ToolCallCancellation(ids))
-                return
             }
 
             root["sessionResumptionUpdate"]?.jsonObject?.let { update ->
@@ -583,14 +580,12 @@ class GeminiLiveClient(
                         )
                     )
                 }
-                return
             }
 
             root["goAway"]?.jsonObject?.let { goAway ->
                 val timeLeft = goAway["timeLeft"]?.jsonPrimitive?.content
                 logger.d("GO_AWAY — server will close soon (timeLeft=$timeLeft)")
                 _events.tryEmit(GeminiEvent.GoAway(timeLeft))
-                return
             }
 
             root["usageMetadata"]?.jsonObject?.let { usage ->
