@@ -133,7 +133,7 @@ fun ClientScreen(
         Column(
             Modifier
                 .fillMaxSize()
-                .statusBarsPadding()
+                .systemBarsPadding()
                 .imePadding()
                 .padding(horizontal = 14.dp)
         ) {
