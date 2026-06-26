@@ -63,6 +63,7 @@ class SessionManager @Inject constructor(
         val isMicActive: Boolean = false,
         val isAiSpeaking: Boolean = false,
         val activePrompt: String = "",
+        val dashboardText: String = "",
         val transcript: List<ConversationMessage> = emptyList(),
         val error: String? = null,
     )
