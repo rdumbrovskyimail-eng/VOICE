@@ -253,7 +253,7 @@ class SessionManager @Inject constructor(
             compressionTriggerTokens = settings.compressionTriggerTokens,
             compressionTargetTokens = settings.compressionTargetTokens,
             enableGoogleSearch = settings.enableGoogleSearch,
-            functionDeclarations = settings.functionDeclarations + dashboardFunction, // <-- ДОБАВИЛИ ИНСТРУМЕНТ СЮДА
+            functionDeclarations = listOf(dashboardFunction), // ИСПРАВЛЕНО: передаем список напрямую
             sendAudioStreamEnd = settings.sendAudioStreamEnd,
         )
     }
