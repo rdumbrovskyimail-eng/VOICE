@@ -19,6 +19,7 @@ import android.media.audiofx.AcousticEchoCanceler
 import android.media.audiofx.NoiseSuppressor
 import com.learnde.app.domain.AudioEngine
 import com.learnde.app.domain.model.SessionConfig
+import javax.inject.Inject
 import com.learnde.app.util.AppLogger
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -39,7 +40,7 @@ import kotlinx.coroutines.yield
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 
-class AndroidAudioEngine(
+class AndroidAudioEngine @Inject constructor(
     private val logger: AppLogger
 ) : AudioEngine {
 
