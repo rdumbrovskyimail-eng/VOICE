@@ -1,3 +1,13 @@
+// Путь: app/src/main/java/com/learnde/app/data/AndroidAudioEngine.kt
+//
+// ★ ГЛАВНОЕ ИСПРАВЛЕНИЕ ТИХОГО ЗВУКА ★
+// Было: AudioTrack с USAGE_VOICE_COMMUNICATION → воспроизведение уходило в поток
+//       телефонного разговора (STREAM_VOICE_CALL) с тихой "звонковой" громкостью.
+// Стало: USAGE_MEDIA + CONTENT_TYPE_SPEECH → воспроизведение идёт через медиа-поток
+//       (STREAM_MUSIC), который по умолчанию ГРОМКИЙ и идёт на динамик/наушники.
+// Микрофон по-прежнему использует VOICE_COMMUNICATION (для аппаратного AEC), а эхо
+// гасится half-duplex логикой во ViewModel/SessionManager (мик не шлётся, пока говорит AI).
+
 package com.learnde.app.data
 
 import android.media.AudioAttributes
@@ -10,8 +20,6 @@ import android.media.audiofx.NoiseSuppressor
 import com.learnde.app.domain.AudioEngine
 import com.learnde.app.domain.model.SessionConfig
 import com.learnde.app.util.AppLogger
-import javax.inject.Inject
-import javax.inject.Singleton
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -40,9 +48,10 @@ class AndroidAudioEngine(
     @Volatile private var jitterPreBufferChunks = 3
     @Volatile private var jitterTimeoutMs = 150L
 
-    @Volatile private var playbackGain: Float = 0.9f
+    @Volatile private var playbackGain: Float = 1.0f   // было 0.9f → 1.0f (без аттенюации)
     @Volatile private var micGain: Float = 1.4f
     @Volatile private var forceSpeakerOutput: Boolean = true
+    @Volatile private var aecEnabled: Boolean = true   // управляется настройкой useAec
 
     // ═══ FLOWS ═══
     private val _micOutput = MutableSharedFlow<ByteArray>(
@@ -104,6 +113,10 @@ class AndroidAudioEngine(
         forceSpeakerOutput = forceSpeaker
     }
 
+    override fun setAecEnabled(enabled: Boolean) {
+        aecEnabled = enabled
+    }
+
     @Suppress("MissingPermission")
     override suspend fun startCapture() {
         if (isCapturing) {
@@ -155,7 +168,7 @@ class AndroidAudioEngine(
             return
         }
 
-        if (AcousticEchoCanceler.isAvailable()) {
+        if (aecEnabled && AcousticEchoCanceler.isAvailable()) {
             runCatching {
                 echoCanceler = AcousticEchoCanceler.create(recorder.audioSessionId)?.apply {
                     enabled = true
@@ -302,7 +315,9 @@ class AndroidAudioEngine(
             AudioTrack.Builder()
                 .setAudioAttributes(
                     AudioAttributes.Builder()
-                        .setUsage(AudioAttributes.USAGE_VOICE_COMMUNICATION)
+                        // ★ ИСПРАВЛЕНИЕ ТИХОГО ЗВУКА: USAGE_MEDIA вместо USAGE_VOICE_COMMUNICATION.
+                        // Медиа-поток громкий по умолчанию и маршрутизируется на динамик/наушники.
+                        .setUsage(AudioAttributes.USAGE_MEDIA)
                         .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH).build()
                 )
                 .setAudioFormat(
@@ -322,7 +337,7 @@ class AndroidAudioEngine(
         runCatching { track.setVolume(playbackGain) }
         track.play()
         isPlaying = true
-        logger.d("Speaker ready (rate=$sampleRate)")
+        logger.d("Speaker ready (rate=$sampleRate, usage=MEDIA, gain=$playbackGain)")
         val myGen = ++playbackLoopGen
         playbackJob = engineScope.launch {
             try {
