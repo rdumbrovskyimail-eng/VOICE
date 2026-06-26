@@ -144,18 +144,19 @@ class SessionManager @Inject constructor(
             }
             liveClient.sendClientTurn(composed, r.images, turnComplete = true)
             addFinalMessage(
-                ConversationMessage.user(t.ifEmpty { "📎 Вложения" }).copy(attachmentNote = buildAttachNote(r))
+                ConversationMessage.user(t.ifEmpty { "📎 Вложения" })
+                    .copy(
+                        attachmentNote = warnNote(r),
+                        attachmentUris = attachments.map { it.toString() }
+                    )
             )
             orchestrator.onUserTurnEnded()
         }
     }
 
-    private fun buildAttachNote(r: com.learnde.app.attach.AttachmentProcessor.Result): String? {
-        val parts = ArrayList<String>()
-        if (r.accepted.isNotEmpty()) parts.add("📎 " + r.accepted.joinToString(", "))
-        if (r.skipped.isNotEmpty()) parts.add("⚠ не поддержано: " + r.skipped.joinToString(", "))
-        return parts.joinToString(" · ").ifEmpty { null }
-    }
+    private fun warnNote(r: com.learnde.app.attach.AttachmentProcessor.Result): String? =
+        if (r.skipped.isEmpty()) null
+        else "⚠ Модель не понимает: " + r.skipped.joinToString(", ")
 
     private fun flushPromptAttachments() {
         val uris = pendingPromptAttachments
@@ -172,7 +173,13 @@ class SessionManager @Inject constructor(
                 if (r.extractedText.isNotEmpty()) { append("\n"); append(r.extractedText) }
             }
             liveClient.sendClientTurn(framing, r.images, turnComplete = true)
-            addFinalMessage(ConversationMessage.user("📎 Материалы сессии").copy(attachmentNote = buildAttachNote(r)))
+            addFinalMessage(
+                ConversationMessage.user("📎 Материалы сессии")
+                    .copy(
+                        attachmentNote = warnNote(r),
+                        attachmentUris = uris.map { it.toString() }
+                    )
+            )
         }
     }
 
@@ -189,6 +196,8 @@ class SessionManager @Inject constructor(
     fun clearError() {
         _state.update { it.copy(error = null) }
     }
+
+    fun retry() = appScope.launch { orchestrator.retryAfterFailure() }
 
     fun shutdown() {
         appScope.launch { stopInternal() }
