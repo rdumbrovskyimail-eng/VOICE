@@ -54,4 +54,5 @@ class ClientViewModel @Inject constructor(
     fun toggleMic() = session.toggleMic()
     fun clearDashboard() = session.clearDashboard()
     fun clearError() = session.clearError()
+    fun retry() = session.retry()
 }
