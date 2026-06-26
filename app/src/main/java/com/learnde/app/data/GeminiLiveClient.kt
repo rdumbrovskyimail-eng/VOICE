@@ -65,7 +65,7 @@ class GeminiLiveClient(
         .pingInterval(30, TimeUnit.SECONDS)
         .build()
 
-    private val internalScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private val internalScope = CoroutineScope(SupervisorJob() + Dispatchers.IO + kotlinx.coroutines.CoroutineExceptionHandler { _, e -> logger.e("liveClient scope uncaught: ${e.message}", e) })
 
     @Volatile private var webSocket: WebSocket? = null
 
