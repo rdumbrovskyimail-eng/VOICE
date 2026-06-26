@@ -4,6 +4,15 @@ import android.Manifest
 import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.material.icons.filled.HourglassEmpty
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalDensity
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.lazy.LazyRow
@@ -290,10 +299,11 @@ private fun MessageBubble(msg: ConversationMessage, prefs: ChatPrefs, timeFormat
                 .padding(horizontal = 14.dp, vertical = 10.dp)
         ) {
             Column {
+                if (msg.attachmentUris.isNotEmpty()) AttachmentThumbnails(msg.attachmentUris)
                 if (msg.text.isNotEmpty())
                     Text(msg.text, color = Color(0xFFF0F1F3), fontSize = (15 * prefs.fontScale).sp, lineHeight = 22.sp)
                 if (msg.attachmentNote != null) {
-                    if (msg.text.isNotEmpty()) Spacer(Modifier.height(6.dp))
+                    if (msg.text.isNotEmpty() || msg.attachmentUris.isNotEmpty()) Spacer(Modifier.height(6.dp))
                     Text(msg.attachmentNote, color = Color(0xFFF0F1F3).copy(alpha = 0.75f), fontSize = (12 * prefs.fontScale).sp)
                 }
             }
@@ -373,3 +383,82 @@ private fun fileLabel(ctx: android.content.Context, uri: Uri): String = runCatch
         if (it.moveToFirst()) it.getString(0) else null
     }
 }.getOrNull() ?: uri.lastPathSegment ?: "файл"
+
+@Composable
+private fun AttachmentThumbnails(uriStrings: List<String>) {
+    val ctx = LocalContext.current
+    Row(
+        Modifier.horizontalScroll(rememberScrollState()).padding(bottom = 8.dp),
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+    ) { uriStrings.forEach { AttachmentTile(ctx, it) } }
+}
+
+@Composable
+private fun AttachmentTile(ctx: android.content.Context, uriString: String) {
+    val uri = remember(uriString) { Uri.parse(uriString) }
+    val density = LocalDensity.current
+    val reqPx = remember { with(density) { 72.dp.roundToPx() } * 2 }
+    var bmp by remember(uriString) { mutableStateOf<android.graphics.Bitmap?>(null) }
+    var tried by remember(uriString) { mutableStateOf(false) }
+
+    LaunchedEffect(uriString) {
+        bmp = runCatching { decodeThumb(ctx, uri, reqPx) }.getOrNull()
+        tried = true
+    }
+
+    Box(
+        Modifier.size(72.dp).clip(RoundedCornerShape(12.dp)).background(SurfaceCtrl),
+        contentAlignment = Alignment.Center,
+    ) {
+        val b = bmp
+        if (b != null) {
+            Image(b.asImageBitmap(), null, Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
+        } else {
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Icon(
+                    if (!tried) Icons.Filled.HourglassEmpty else Icons.Filled.InsertDriveFile,
+                    null, tint = if (!tried) TextDim else AccentBlue, modifier = Modifier.size(22.dp),
+                )
+                if (tried) {
+                    val ext = remember(uriString) { fileExt(ctx, uri) }
+                    if (ext.isNotEmpty()) { Spacer(Modifier.height(4.dp)); Text(ext, color = TextDim, fontSize = 9.sp, maxLines = 1) }
+                }
+            }
+        }
+    }
+}
+
+private object ThumbCache {
+    private val lru = object : android.util.LruCache<String, android.graphics.Bitmap>(6 * 1024 * 1024) {
+        override fun sizeOf(key: String, v: android.graphics.Bitmap) = v.byteCount
+    }
+    fun get(k: String): android.graphics.Bitmap? = lru.get(k)
+    fun put(k: String, v: android.graphics.Bitmap) { if (lru.get(k) == null) lru.put(k, v) }
+}
+
+private suspend fun decodeThumb(ctx: android.content.Context, uri: Uri, reqPx: Int): android.graphics.Bitmap? =
+    withContext(Dispatchers.IO) {
+        val key = "$uri@$reqPx"
+        ThumbCache.get(key)?.let { return@withContext it }
+        val cr = ctx.contentResolver
+        if (!cr.getType(uri).orEmpty().startsWith("image/")) return@withContext null
+        val bounds = android.graphics.BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        cr.openInputStream(uri)?.use { android.graphics.BitmapFactory.decodeStream(it, null, bounds) }
+        if (bounds.outWidth <= 0) return@withContext null
+        var sample = 1
+        val longest = maxOf(bounds.outWidth, bounds.outHeight)
+        while (longest / (sample * 2) >= reqPx) sample *= 2
+        val opts = android.graphics.BitmapFactory.Options().apply { inSampleSize = sample }
+        val bmp = cr.openInputStream(uri)?.use { android.graphics.BitmapFactory.decodeStream(it, null, opts) }
+            ?: return@withContext null
+        ThumbCache.put(key, bmp); bmp
+    }
+
+private fun fileExt(ctx: android.content.Context, uri: Uri): String {
+    val name = runCatching {
+        ctx.contentResolver.query(uri, arrayOf(android.provider.OpenableColumns.DISPLAY_NAME), null, null, null)?.use {
+            if (it.moveToFirst()) it.getString(0) else null
+        }
+    }.getOrNull() ?: uri.lastPathSegment ?: ""
+    return name.substringAfterLast('.', "").uppercase().take(4)
+}
