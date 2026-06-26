@@ -213,6 +213,7 @@ class AndroidAudioEngine @Inject constructor(
             val noiseFloor = 900
 
             try {
+                val shortBuffer = byteBuffer.asShortBuffer()
                 while (isActive && isCapturing) {
                     val read = recorder.read(buffer, 0, buffer.size)
                     when {
@@ -245,14 +246,16 @@ class AndroidAudioEngine @Inject constructor(
                             }
 
                             byteBuffer.clear()
-                            byteBuffer.asShortBuffer().put(buffer, 0, read)
+                            shortBuffer.clear()
+                            shortBuffer.put(buffer, 0, read)
                             _micOutput.tryEmit(rawBytes.copyOf(read * 2))
                         }
                         read == 0 -> {
                             yield()
                         }
                         else -> {
-                            logger.d("AudioRecord.read returned $read — exiting loop")
+                            logger.e("AudioRecord.read returned $read — exiting loop")
+                            isCapturing = false
                             break
                         }
                     }
@@ -400,7 +403,11 @@ class AndroidAudioEngine @Inject constructor(
         estimatedPlaybackEndMs = 0L
         audibleUntilMs = 0L
         audioTrack?.apply {
-            runCatching { pause(); flush(); play() }
+            runCatching { 
+                if (state == AudioTrack.STATE_INITIALIZED) {
+                    pause(); flush(); play() 
+                }
+            }
         }
     }
 
