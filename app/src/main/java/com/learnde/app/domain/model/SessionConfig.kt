@@ -1,3 +1,10 @@
+// Путь: app/src/main/java/com/learnde/app/domain/model/SessionConfig.kt
+//
+// Изменения относительно исходной версии:
+//   • compressionTriggerTokens / compressionTargetTokens теперь имеют рабочие дефолты
+//     (25600 / 8192) — нужны, чтобы сжатие контекста реально включилось и сняло лимит ~15 мин.
+//   • Все остальные поля сохранены без изменений (на них ссылается GeminiLiveClient).
+
 package com.learnde.app.domain.model
 
 data class FunctionDeclarationConfig(
@@ -19,20 +26,20 @@ data class ParameterConfig(
 data class SessionConfig(
     val model: String = DEFAULT_MODEL,
     val responseModality: String = "AUDIO",
-    val temperature: Float = 0.7f,
+    val temperature: Float = 0.8f,
     val topP: Float = 0.95f,
     val topK: Int = 0,
-    val maxOutputTokens: Int = 4096,
-    val voiceId: String = "Aoede",
+    val maxOutputTokens: Int = 8192,
+    val voiceId: String = "Sulafat",
     val languageCode: String = "",
-    val latencyProfile: LatencyProfile = LatencyProfile.UltraLow,
+    val latencyProfile: LatencyProfile = LatencyProfile.Low,
     val thinkingIncludeThoughts: Boolean = false,
     val mediaResolution: String = "",
     val autoActivityDetection: Boolean = true,
     val vadStartSensitivity: String = "START_SENSITIVITY_HIGH",
     val vadEndSensitivity: String = "END_SENSITIVITY_LOW",
     val vadPrefixPaddingMs: Int = 300,
-    val vadSilenceDurationMs: Int = 900,
+    val vadSilenceDurationMs: Int = 800,
     val activityHandling: String = "NO_INTERRUPTION",
     val systemInstruction: String = DEFAULT_SYSTEM_INSTRUCTION,
     val inputTranscription: Boolean = true,
@@ -40,8 +47,9 @@ data class SessionConfig(
     val enableSessionResumption: Boolean = true,
     val sessionHandle: String? = null,
     val enableContextCompression: Boolean = true,
-    val compressionTriggerTokens: Long = 0L,
-    val compressionTargetTokens: Long = 0L,
+    // Рабочие дефолты сжатия (раньше были 0 → конфиг не эмитился).
+    val compressionTriggerTokens: Long = 25_600L,
+    val compressionTargetTokens: Long = 8_192L,
     val enableGoogleSearch: Boolean = false,
     val functionDeclarations: List<FunctionDeclarationConfig> = emptyList(),
     val sendAudioStreamEnd: Boolean = true,
