@@ -1,13 +1,3 @@
-// Путь: app/src/main/java/com/learnde/app/presentation/client/ClientScreen.kt
-//
-// ЭТАП 2 — главный экран универсального голосового клиента. Три зоны по вертикали:
-//   • 20% — поле ввода системного промпта + кнопка «Применить»: в активной сессии
-//           пересоздаёт её с новым промптом (например, промпт по фото учебника).
-//   • 20% — аудио-реактивный орб (VoiceVisualizer). Тап по орбу = подключить/отключить.
-//   • 60% — чат: транскрипция речи в реальном времени + поле ввода текста (модель «читает»
-//           сообщение как SMS) + кнопка микрофона.
-// Применяет настройки отображения чата (шрифт, метки ролей, таймстемпы, авто-скролл).
-
 package com.learnde.app.presentation.client
 
 import android.Manifest
@@ -15,49 +5,28 @@ import android.content.pm.PackageManager
 import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.imePadding
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.systemBarsPadding
-import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Mic
-import androidx.compose.material.icons.filled.MicOff
-import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.filled.Send
-import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material.icons.filled.Stop
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.OutlinedTextFieldDefaults
-import androidx.compose.material3.Text
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
+import androidx.compose.material.icons.filled.*
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
@@ -67,6 +36,8 @@ import androidx.navigation.NavController
 import com.learnde.app.domain.model.ConversationMessage
 import com.learnde.app.presentation.navigation.Routes
 import com.learnde.app.session.SessionManager
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Locale
 
@@ -74,6 +45,7 @@ private val BgColor = Color(0xFF0F1114)
 private val AccentBlue = Color(0xFF6EA8FE)
 private val SurfaceCtrl = Color(0xFF181B20)
 private val TextDim = Color(0xFF8B919A)
+private val SuccessGreen = Color(0xFF4CAF50)
 
 @Composable
 fun ClientScreen(
@@ -84,38 +56,31 @@ fun ClientScreen(
     val amplitude by viewModel.amplitude.collectAsStateWithLifecycle()
     val chatPrefs by viewModel.chatPrefs.collectAsStateWithLifecycle()
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
 
     var promptText by remember { mutableStateOf("") }
     var chatInput by remember { mutableStateOf("") }
+    var showPromptSuccess by remember { mutableStateOf(false) }
 
-    // Один раз подставляем активный промпт (если сессия уже шла).
     LaunchedEffect(state.activePrompt) {
         if (state.activePrompt.isNotEmpty() && promptText.isEmpty()) {
             promptText = state.activePrompt
         }
     }
 
-    fun hasRecord() = ContextCompat.checkSelfPermission(
-        context, Manifest.permission.RECORD_AUDIO
-    ) == PackageManager.PERMISSION_GRANTED
-
+    fun hasRecord() = ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
     fun neededPerms(): Array<String> {
         val list = mutableListOf(Manifest.permission.RECORD_AUDIO)
-        if (Build.VERSION.SDK_INT >= 33) {
-            list.add(Manifest.permission.POST_NOTIFICATIONS)
-        }
+        if (Build.VERSION.SDK_INT >= 33) list.add(Manifest.permission.POST_NOTIFICATIONS)
         return list.toTypedArray()
     }
 
-    val connectLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.RequestMultiplePermissions()
-    ) { result ->
+    val connectLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { result ->
         if (result[Manifest.permission.RECORD_AUDIO] == true) viewModel.toggleConnection()
     }
-
-    val micLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.RequestPermission()
-    ) { granted -> if (granted) viewModel.toggleMic() }
+    val micLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted -> 
+        if (granted) viewModel.toggleMic() 
+    }
 
     fun onToggleConnection() {
         if (hasRecord()) viewModel.toggleConnection() else connectLauncher.launch(neededPerms())
@@ -125,69 +90,94 @@ fun ClientScreen(
         if (hasRecord()) viewModel.toggleMic() else micLauncher.launch(Manifest.permission.RECORD_AUDIO)
     }
 
-    Box(
-        Modifier
-            .fillMaxSize()
-            .background(BgColor)
-    ) {
+    Box(modifier = Modifier.fillMaxSize().background(BgColor)) {
         Column(
-            Modifier
+            modifier = Modifier
                 .fillMaxSize()
                 .systemBarsPadding()
                 .imePadding()
-                .padding(horizontal = 14.dp)
         ) {
-            // ─────── Slim header ───────
+            // 1. HEADER
             Header(
                 state = state,
                 onToggleConnection = { onToggleConnection() },
                 onSettings = { navController.navigate(Routes.SETTINGS) },
+                modifier = Modifier.padding(horizontal = 14.dp)
             )
 
-            // ─────── 20% — Системный промпт ───────
-            Box(Modifier.weight(0.20f).fillMaxWidth().padding(vertical = 6.dp)) {
+            // 2. PROMPT ZONE & SUCCESS MESSAGE
+            Column(modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp)) {
                 PromptZone(
                     value = promptText,
                     onValueChange = { promptText = it },
-                    onApply = { viewModel.applyPrompt(promptText.trim()) },
+                    onApply = {
+                        viewModel.applyPrompt(promptText.trim())
+                        scope.launch {
+                            showPromptSuccess = true
+                            delay(2500)
+                            showPromptSuccess = false
+                        }
+                    },
                 )
-            }
-
-            // ─────── 20% — Орб (тап = подключить/отключить) ───────
-            Box(
-                Modifier
-                    .weight(0.20f)
-                    .fillMaxWidth()
-                    .clickable { onToggleConnection() },
-                contentAlignment = Alignment.Center,
-            ) {
-                VoiceVisualizer(
-                    amplitude = amplitude,
-                    isActive = state.isConnected || state.isConnecting,
-                    modifier = Modifier.fillMaxSize(),
-                )
-                if (!state.isConnected && !state.isConnecting) {
-                    Text("Нажмите, чтобы начать", color = TextDim, fontSize = 13.sp)
+                
+                AnimatedVisibility(
+                    visible = showPromptSuccess,
+                    enter = fadeIn() + slideInVertically { -20 },
+                    exit = fadeOut() + slideOutVertically { -20 }
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.padding(top = 8.dp, start = 4.dp)
+                    ) {
+                        Icon(Icons.Filled.CheckCircle, contentDescription = null, tint = SuccessGreen, modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text("Промпт успешно установлен и применен", color = SuccessGreen, fontSize = 13.sp, fontWeight = FontWeight.Medium)
+                    }
                 }
             }
 
-            // ─────── 60% — Чат ───────
-            Column(Modifier.weight(0.60f).fillMaxWidth()) {
-                state.error?.let {
-                    Text(
-                        it,
-                        color = Color(0xFFEF5350),
-                        fontSize = 13.sp,
-                        modifier = Modifier.padding(vertical = 4.dp),
-                    )
+            // 3. DASHBOARD (ЦИФЕРБЛАТ)
+            AnimatedVisibility(visible = state.dashboardText.isNotEmpty()) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 14.dp, vertical = 8.dp)
+                        .clip(RoundedCornerShape(16.dp))
+                        .background(Color(0xFF1E2229))
+                        .padding(16.dp)
+                ) {
+                    Column {
+                        Text("💡 От ассистента", color = AccentBlue, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(state.dashboardText, color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Medium)
+                    }
                 }
+            }
 
+            // 4. CHAT AREA (занимает оставшееся место)
+            Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
                 ChatList(
                     messages = state.transcript,
                     prefs = chatPrefs,
-                    modifier = Modifier.weight(1f).fillMaxWidth(),
+                    modifier = Modifier.fillMaxSize().padding(horizontal = 14.dp)
+                )
+            }
+
+            // 5. BOTTOM AREA: WAVES + INPUT
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(140.dp), // Высота зоны волн
+                contentAlignment = Alignment.BottomCenter
+            ) {
+                // Волны на заднем фоне
+                GeminiWaves(
+                    amplitude = amplitude,
+                    isActive = state.isConnected || state.isConnecting,
+                    modifier = Modifier.fillMaxSize()
                 )
 
+                // Поле ввода и микрофон поверх волн
                 InputRow(
                     value = chatInput,
                     onValueChange = { chatInput = it },
@@ -197,6 +187,7 @@ fun ClientScreen(
                     },
                     isMicActive = state.isMicActive,
                     onToggleMic = { onToggleMic() },
+                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 16.dp)
                 )
             }
         }
@@ -204,28 +195,14 @@ fun ClientScreen(
 }
 
 @Composable
-private fun Header(
-    state: SessionManager.State,
-    onToggleConnection: () -> Unit,
-    onSettings: () -> Unit,
-) {
+private fun Header(state: SessionManager.State, onToggleConnection: () -> Unit, onSettings: () -> Unit, modifier: Modifier = Modifier) {
     val dotColor = when {
         state.isConnected -> Color(0xFF66BB6A)
         state.isConnecting -> Color(0xFFFFC107)
         else -> Color(0xFF9E9E9E)
     }
-    Row(
-        Modifier
-            .fillMaxWidth()
-            .height(52.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Box(
-            Modifier
-                .size(10.dp)
-                .clip(CircleShape)
-                .background(dotColor)
-        )
+    Row(modifier = modifier.fillMaxWidth().height(52.dp), verticalAlignment = Alignment.CenterVertically) {
+        Box(Modifier.size(10.dp).clip(CircleShape).background(dotColor))
         Spacer(Modifier.width(8.dp))
         Text(
             when {
@@ -233,12 +210,9 @@ private fun Header(
                 state.isConnecting -> "Подключение…"
                 else -> "Отключено"
             },
-            color = TextDim,
-            fontSize = 13.sp,
+            color = TextDim, fontSize = 13.sp, fontWeight = FontWeight.Medium
         )
-
         Spacer(Modifier.weight(1f))
-
         IconButton(onClick = onToggleConnection) {
             Icon(
                 if (state.isConnected || state.isConnecting) Icons.Filled.Stop else Icons.Filled.PlayArrow,
@@ -253,16 +227,12 @@ private fun Header(
 }
 
 @Composable
-private fun PromptZone(
-    value: String,
-    onValueChange: (String) -> Unit,
-    onApply: () -> Unit,
-) {
-    Row(Modifier.fillMaxSize(), verticalAlignment = Alignment.CenterVertically) {
+private fun PromptZone(value: String, onValueChange: (String) -> Unit, onApply: () -> Unit) {
+    Row(Modifier.fillMaxWidth().height(56.dp), verticalAlignment = Alignment.CenterVertically) {
         OutlinedTextField(
             value = value,
             onValueChange = onValueChange,
-            modifier = Modifier.weight(1f).fillMaxSize(),
+            modifier = Modifier.weight(1f).fillMaxHeight(),
             placeholder = { Text("Системный промпт сессии…", color = TextDim, fontSize = 13.sp) },
             textStyle = androidx.compose.ui.text.TextStyle(color = Color.White, fontSize = 14.sp),
             shape = RoundedCornerShape(12.dp),
@@ -271,90 +241,45 @@ private fun PromptZone(
         Spacer(Modifier.width(8.dp))
         IconButton(
             onClick = onApply,
-            modifier = Modifier
-                .size(48.dp)
-                .clip(RoundedCornerShape(12.dp))
-                .background(AccentBlue),
+            modifier = Modifier.size(56.dp).clip(RoundedCornerShape(12.dp)).background(AccentBlue),
         ) {
-            Icon(Icons.Filled.Send, contentDescription = "Применить промпт", tint = Color.White)
+            Icon(Icons.Filled.Check, contentDescription = "Применить промпт", tint = Color.White)
         }
     }
 }
 
 @Composable
-private fun ChatList(
-    messages: List<ConversationMessage>,
-    prefs: ChatPrefs,
-    modifier: Modifier = Modifier,
-) {
+private fun ChatList(messages: List<ConversationMessage>, prefs: ChatPrefs, modifier: Modifier = Modifier) {
     val listState = rememberLazyListState()
     val timeFormatter = remember { SimpleDateFormat("HH:mm", Locale.getDefault()) }
     LaunchedEffect(messages.size, prefs.autoScroll) {
-        if (prefs.autoScroll && messages.isNotEmpty()) {
-            listState.animateScrollToItem(messages.size - 1)
-        }
+        if (prefs.autoScroll && messages.isNotEmpty()) listState.animateScrollToItem(messages.size - 1)
     }
-    LazyColumn(
-        modifier = modifier,
-        state = listState,
-        verticalArrangement = Arrangement.spacedBy(6.dp),
-    ) {
+    LazyColumn(modifier = modifier, state = listState, verticalArrangement = Arrangement.spacedBy(8.dp), contentPadding = PaddingValues(vertical = 8.dp)) {
         items(messages) { msg -> MessageBubble(msg, prefs, timeFormatter) }
     }
 }
 
 @Composable
-private fun MessageBubble(
-    msg: ConversationMessage,
-    prefs: ChatPrefs,
-    timeFormatter: SimpleDateFormat,
-) {
+private fun MessageBubble(msg: ConversationMessage, prefs: ChatPrefs, timeFormatter: SimpleDateFormat) {
     val isUser = msg.role == ConversationMessage.ROLE_USER
-    Column(
-        Modifier.fillMaxWidth(),
-        horizontalAlignment = if (isUser) Alignment.End else Alignment.Start,
-    ) {
+    Column(Modifier.fillMaxWidth(), horizontalAlignment = if (isUser) Alignment.End else Alignment.Start) {
         if (prefs.showRoleLabels) {
-            Text(
-                if (isUser) "Вы" else "Ассистент",
-                color = TextDim,
-                fontSize = (11 * prefs.fontScale).sp,
-                modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp),
-            )
+            Text(if (isUser) "Вы" else "Ассистент", color = TextDim, fontSize = (11 * prefs.fontScale).sp, modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp))
         }
         Box(
-            Modifier
-                .clip(RoundedCornerShape(14.dp))
-                .background(if (isUser) AccentBlue.copy(alpha = 0.22f) else SurfaceCtrl)
-                .padding(horizontal = 12.dp, vertical = 8.dp)
+            Modifier.clip(RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp, bottomStart = if (isUser) 16.dp else 4.dp, bottomEnd = if (isUser) 4.dp else 16.dp))
+                .background(if (isUser) AccentBlue.copy(alpha = 0.2f) else SurfaceCtrl.copy(alpha = 0.8f))
+                .padding(horizontal = 14.dp, vertical = 10.dp)
         ) {
-            Text(msg.text, color = Color(0xFFF0F1F3), fontSize = (14 * prefs.fontScale).sp)
-        }
-        if (prefs.showTimestamps) {
-            Text(
-                timeFormatter.format(java.util.Date(msg.timestamp)),
-                color = TextDim,
-                fontSize = (10 * prefs.fontScale).sp,
-                modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp),
-            )
+            Text(msg.text, color = Color(0xFFF0F1F3), fontSize = (15 * prefs.fontScale).sp, lineHeight = 22.sp)
         }
     }
 }
 
 @Composable
-private fun InputRow(
-    value: String,
-    onValueChange: (String) -> Unit,
-    onSend: () -> Unit,
-    isMicActive: Boolean,
-    onToggleMic: () -> Unit,
-) {
-    Row(
-        Modifier
-            .fillMaxWidth()
-            .padding(top = 8.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
+private fun InputRow(value: String, onValueChange: (String) -> Unit, onSend: () -> Unit, isMicActive: Boolean, onToggleMic: () -> Unit, modifier: Modifier = Modifier) {
+    Row(modifier = modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
         OutlinedTextField(
             value = value,
             onValueChange = onValueChange,
@@ -363,42 +288,31 @@ private fun InputRow(
             textStyle = androidx.compose.ui.text.TextStyle(color = Color.White, fontSize = 14.sp),
             shape = RoundedCornerShape(24.dp),
             singleLine = true,
-            colors = darkFieldColors(),
+            colors = darkFieldColors().copy(
+                focusedContainerColor = Color(0xFF131519).copy(alpha = 0.8f),
+                unfocusedContainerColor = Color(0xFF131519).copy(alpha = 0.8f)
+            ),
         )
-        Spacer(Modifier.width(6.dp))
+        Spacer(Modifier.width(8.dp))
         IconButton(
             onClick = onSend,
-            modifier = Modifier
-                .size(48.dp)
-                .clip(CircleShape)
-                .background(AccentBlue),
+            modifier = Modifier.size(48.dp).clip(CircleShape).background(AccentBlue),
         ) {
-            Icon(Icons.Filled.Send, contentDescription = "Отправить", tint = Color.White)
+            Icon(Icons.Filled.Send, contentDescription = "Отправить", tint = Color.White, modifier = Modifier.size(20.dp))
         }
-        Spacer(Modifier.width(6.dp))
+        Spacer(Modifier.width(8.dp))
         IconButton(
             onClick = onToggleMic,
-            modifier = Modifier
-                .size(48.dp)
-                .clip(CircleShape)
-                .background(if (isMicActive) Color(0xFF4CAF50) else SurfaceCtrl),
+            modifier = Modifier.size(56.dp).clip(CircleShape).background(if (isMicActive) Color(0xFF4CAF50) else SurfaceCtrl),
         ) {
-            Icon(
-                if (isMicActive) Icons.Filled.Mic else Icons.Filled.MicOff,
-                contentDescription = "Микрофон",
-                tint = if (isMicActive) Color.White else TextDim,
-            )
+            Icon(if (isMicActive) Icons.Filled.Mic else Icons.Filled.MicOff, contentDescription = "Микрофон", tint = if (isMicActive) Color.White else TextDim, modifier = Modifier.size(28.dp))
         }
     }
 }
 
 @Composable
 private fun darkFieldColors() = OutlinedTextFieldDefaults.colors(
-    focusedTextColor = Color.White,
-    unfocusedTextColor = Color.White,
-    cursorColor = AccentBlue,
-    focusedBorderColor = AccentBlue,
-    unfocusedBorderColor = Color(0x33FFFFFF),
-    focusedContainerColor = Color(0xFF131519),
-    unfocusedContainerColor = Color(0xFF131519),
+    focusedTextColor = Color.White, unfocusedTextColor = Color.White,
+    cursorColor = AccentBlue, focusedBorderColor = AccentBlue, unfocusedBorderColor = Color(0x33FFFFFF),
+    focusedContainerColor = Color(0xFF131519), unfocusedContainerColor = Color(0xFF131519),
 )
