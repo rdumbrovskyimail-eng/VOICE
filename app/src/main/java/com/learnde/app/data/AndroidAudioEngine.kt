@@ -406,10 +406,11 @@ class AndroidAudioEngine @Inject constructor(
         estimatedPlaybackEndMs = 0L
         audibleUntilMs = 0L
         runCatching { playbackChannel.close() }
-        runCatching {
-            withTimeoutOrNull(800L) { playbackJob?.cancelAndJoin() }
-        }
+        val pJob = playbackJob
         playbackJob = null
+        runCatching {
+            withTimeoutOrNull(800L) { pJob?.cancelAndJoin() }
+        }
         synchronized(trackLock) {
             audioTrack?.let {
                 runCatching { it.pause(); it.flush(); it.stop(); it.release() }
