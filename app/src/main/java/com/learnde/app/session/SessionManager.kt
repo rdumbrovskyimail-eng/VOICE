@@ -428,8 +428,11 @@ class SessionManager @Inject constructor(
                     isConnecting = link == LinkState.CONNECTING || link == LinkState.RECOVERING || link == LinkState.ROTATING,
                 ) }
                 if (link == LinkState.READY) {
-                    flushPromptAttachments()
-                    seedHistoryIfNeeded()
+                    // ДОБАВЛЕНА ПРОВЕРКА: отправляем начальный контекст только для новой сессии
+                    if (liveClient.sessionHandle == null) {
+                        flushPromptAttachments()
+                        seedHistoryIfNeeded()
+                    }
                 }
             }
         }
@@ -534,7 +537,10 @@ class SessionManager @Inject constructor(
             }
             _state.update { it.copy(isMicActive = true) }
             audioEngine.micOutput.collect { chunk ->
-                if (System.currentTimeMillis() > audioEngine.playbackAudibleUntilMs + 400L) {
+                val isAiPlaying = System.currentTimeMillis() <= audioEngine.playbackAudibleUntilMs + 400L
+                
+                // ИЗМЕНЕНО: Учитываем флаг bargeInEnabled
+                if (bargeInEnabled || !isAiPlaying) {
                     liveClient.sendAudio(chunk)
                     if (!_state.value.isAiSpeaking) pushLevel(visLevel(rms(chunk)))
                 }
@@ -620,5 +626,31 @@ class SessionManager @Inject constructor(
 
     private fun stopService() {
         runCatching { context.startService(GeminiLiveForegroundService.stopIntent(context)) }
+    }
+
+    private fun seedHistoryIfNeeded() {
+        if (_state.value.mode != ClientMode.HISTORY) return
+        appScope.launch {
+            val history = historyDao.getAll().map { 
+                ConversationMessage(it.role, it.text) 
+            }
+            if (history.isNotEmpty()) {
+                liveClient.restoreContext(history)
+            }
+        }
+    }
+
+    private fun flushHistory() {
+        if (_state.value.mode != ClientMode.HISTORY) return
+        appScope.launch {
+            historyDao.clear()
+            _state.value.transcript.forEach { msg ->
+                historyDao.insert(com.learnde.app.history.HistoryMessage(
+                    role = msg.role,
+                    text = msg.text,
+                    timestamp = msg.timestamp
+                ))
+            }
+        }
     }
 }
