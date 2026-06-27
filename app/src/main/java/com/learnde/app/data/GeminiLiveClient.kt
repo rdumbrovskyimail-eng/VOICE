@@ -313,9 +313,10 @@ class GeminiLiveClient(
                         put("mediaResolution", config.mediaResolution)
                     }
 
-                    if (config.inputTranscription) put("inputAudioTranscription", buildJsonObject {})
-                    if (config.outputTranscription) put("outputAudioTranscription", buildJsonObject {})
                 })
+
+                if (config.inputTranscription) put("inputAudioTranscription", buildJsonObject {})
+                if (config.outputTranscription) put("outputAudioTranscription", buildJsonObject {})
 
                 if (config.systemInstruction.isNotBlank()) {
                     put("systemInstruction", buildJsonObject {
@@ -331,12 +332,12 @@ class GeminiLiveClient(
                     put("tools", buildJsonArray {
                         if (config.enableGoogleSearch) {
                             add(buildJsonObject {
-                                put("google_search", buildJsonObject {})
+                                put("googleSearch", buildJsonObject {})
                             })
                         }
                         if (config.functionDeclarations.isNotEmpty()) {
                             add(buildJsonObject {
-                                put("function_declarations", buildJsonArray {
+                                put("functionDeclarations", buildJsonArray {
                                     for (decl in config.functionDeclarations) {
                                         add(buildFunctionDeclaration(decl))
                                     }
@@ -360,12 +361,6 @@ class GeminiLiveClient(
                         put("activityHandling", config.activityHandling)
                     }
                 })
-
-                if (config.model.contains("gemini-3.1")) {
-                    put("historyConfig", buildJsonObject {
-                        put("initialHistoryInClientContent", true)
-                    })
-                }
 
                 if (config.enableSessionResumption) {
                     put("sessionResumption", buildJsonObject {
