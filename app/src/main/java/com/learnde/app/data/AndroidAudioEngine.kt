@@ -410,7 +410,6 @@ class AndroidAudioEngine @Inject constructor(
             withTimeoutOrNull(800L) { playbackJob?.cancelAndJoin() }
         }
         playbackJob = null
-        kotlinx.coroutines.withTimeoutOrNull(800L) { playbackJob?.cancelAndJoin() }
         synchronized(trackLock) {
             audioTrack?.let {
                 runCatching { it.pause(); it.flush(); it.stop(); it.release() }
