@@ -43,7 +43,7 @@ data class AppSettings(
     val temperature: Float = 0.7f,   // собраннее: меньше «воды», надёжнее зовёт update_dashboard
     val topP: Float = 0.95f,
     val topK: Int = 0,                 // 0 = не отправлять topK (валидно для Live API)
-    val maxOutputTokens: Int = 8192,
+    val maxOutputTokens: Int = 65536,
     val responseModality: String = "AUDIO",
 
     // ─────────── Голос ───────────
@@ -53,6 +53,8 @@ data class AppSettings(
 
     // ─────────── Аудио-движок ───────────
     val useAec: Boolean = true,
+    // Полный дуплекс: можно перебивать ассистента голосом. Требует аппаратного AEC.
+    val bargeInEnabled: Boolean = false,
     val jitterPreBufferChunks: Int = 3,
     val jitterTimeoutMs: Long = 150L,
     val playbackQueueCapacity: Int = 256,
@@ -101,6 +103,9 @@ data class AppSettings(
 
     // ─────────── Системная инструкция ───────────
     val systemInstruction: String = DEFAULT_SYSTEM_INSTRUCTION,
+    // Режим History: постоянный промпт + блокировка (меняется только через Clear).
+    val historyPrompt: String = "",
+    val historyPromptLocked: Boolean = false,
 
     // ─────────── UI / тема / чат ───────────
     val onboardingDone: Boolean = false,
