@@ -57,6 +57,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
 import com.learnde.app.domain.model.ConversationMessage
 import com.learnde.app.presentation.navigation.Routes
+import com.learnde.app.session.ClientMode
 import com.learnde.app.session.SessionManager
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
