@@ -142,6 +142,36 @@ fun ClientScreen(
                 modifier = Modifier.padding(horizontal = 14.dp)
             )
 
+            AnimatedVisibility(
+                visible = state.error != null,
+                enter = fadeIn() + slideInVertically { -20 },
+                exit = fadeOut() + slideOutVertically { -20 }
+            ) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 14.dp, vertical = 8.dp)
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(Color(0xFFEF5350).copy(alpha = 0.15f))
+                        .border(1.dp, Color(0xFFEF5350).copy(alpha = 0.5f), RoundedCornerShape(12.dp))
+                        .padding(12.dp)
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Filled.ErrorOutline, contentDescription = null, tint = Color(0xFFEF5350))
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = state.error ?: "",
+                            color = Color.White,
+                            fontSize = 13.sp,
+                            modifier = Modifier.weight(1f)
+                        )
+                        IconButton(onClick = { viewModel.clearError() }, modifier = Modifier.size(24.dp)) {
+                            Icon(Icons.Filled.Close, contentDescription = "Закрыть", tint = Color.White, modifier = Modifier.size(16.dp))
+                        }
+                    }
+                }
+            }
+
             // 2. PROMPT ZONE (скрыт в History) / HISTORY CONTROLS
             if (isHistory) HistoryControls(
                 info = historyInfo,
