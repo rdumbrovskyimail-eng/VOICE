@@ -12,6 +12,7 @@ import androidx.datastore.core.DataStore
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.learnde.app.data.settings.AppSettings
+import com.learnde.app.session.ClientMode
 import com.learnde.app.session.SessionManager
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.SharingStarted
@@ -36,6 +37,11 @@ class ClientViewModel @Inject constructor(
 
     val state = session.state
     val amplitude = session.amplitude
+    val historyMessages = session.historyMessages
+
+    val historyInfo: StateFlow<HistoryInfo> = settingsStore.data
+        .map { HistoryInfo(prompt = it.historyPrompt, locked = it.historyPromptLocked) }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), HistoryInfo())
 
     val chatPrefs: StateFlow<ChatPrefs> = settingsStore.data
         .map {
@@ -55,4 +61,13 @@ class ClientViewModel @Inject constructor(
     fun clearDashboard() = session.clearDashboard()
     fun clearError() = session.clearError()
     fun retry() = session.retry()
+
+    fun toggleHistoryMode() {
+        val next = if (state.value.mode == ClientMode.HISTORY) ClientMode.NORMAL else ClientMode.HISTORY
+        session.setMode(next)
+    }
+    fun applyHistoryPrompt(prompt: String) = session.setHistoryPrompt(prompt)
+    fun clearHistory() = session.clearHistory()
 }
+
+data class HistoryInfo(val prompt: String = "", val locked: Boolean = false)
