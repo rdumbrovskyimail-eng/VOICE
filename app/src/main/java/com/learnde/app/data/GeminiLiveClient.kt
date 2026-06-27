@@ -112,9 +112,26 @@ class GeminiLiveClient(
         }
     }
 
+    private suspend fun disconnectInternal() {
+        cancelSetupWatchdog()
+        val ws = webSocket
+        if (ws == null) {
+            isReady = false
+            return
+        }
+        val completion = closeCompletion
+        runCatching { ws.close(1000, "bye") }
+        if (completion != null && !completion.isCompleted) {
+            withTimeoutOrNull(2000L) { completion.await() }
+        }
+        webSocket = null
+        isReady = false
+        closeCompletion = null
+    }
+
     override suspend fun connect(apiKey: String, config: SessionConfig, logRaw: Boolean) {
         wsMutex.withLock {
-            if (webSocket != null) disconnect()
+            if (webSocket != null) disconnectInternal()
 
             currentConfig = config
         logRawFrames = logRaw
@@ -240,20 +257,7 @@ class GeminiLiveClient(
 
     override suspend fun disconnect() {
         wsMutex.withLock {
-            cancelSetupWatchdog()
-            val ws = webSocket
-            if (ws == null) {
-                isReady = false
-                return@withLock
-            }
-            val completion = closeCompletion
-            runCatching { ws.close(1000, "bye") }
-            if (completion != null && !completion.isCompleted) {
-                withTimeoutOrNull(2000L) { completion.await() }
-            }
-            webSocket = null
-            isReady = false
-            closeCompletion = null
+            disconnectInternal()
         }
     }
 
@@ -308,10 +312,10 @@ class GeminiLiveClient(
                     if (config.mediaResolution.isNotBlank()) {
                         put("mediaResolution", config.mediaResolution)
                     }
-                })
 
-                if (config.inputTranscription) put("inputAudioTranscription", buildJsonObject {})
-                if (config.outputTranscription) put("outputAudioTranscription", buildJsonObject {})
+                    if (config.inputTranscription) put("inputAudioTranscription", buildJsonObject {})
+                    if (config.outputTranscription) put("outputAudioTranscription", buildJsonObject {})
+                })
 
                 if (config.systemInstruction.isNotBlank()) {
                     put("systemInstruction", buildJsonObject {
