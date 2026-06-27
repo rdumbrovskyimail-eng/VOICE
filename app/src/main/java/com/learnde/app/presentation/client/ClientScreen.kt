@@ -32,6 +32,7 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -142,6 +143,7 @@ fun ClientScreen(
                 modifier = Modifier.padding(horizontal = 14.dp)
             )
 
+            // 🔥 ИНФОРМИРОВАНИЕ ОБ ОШИБКАХ (Вывод state.error)
             AnimatedVisibility(
                 visible = state.error != null,
                 enter = fadeIn() + slideInVertically { -20 },
