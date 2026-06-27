@@ -28,7 +28,7 @@ android {
         versionName = "1.0"
 
         // Оставляем только нужные локали — ускоряет packaging
-        resourceConfigurations += listOf("ru", "de", "en")
+        androidResources.localeFilters += listOf("ru", "de", "en")
     }
 
     buildFeatures {
