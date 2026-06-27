@@ -256,6 +256,7 @@ private fun Header(state: SessionManager.State, onToggleConnection: () -> Unit, 
     }
 }
 
+@Composable
 private fun PromptZone(
     value: String,
     onValueChange: (String) -> Unit,
