@@ -357,7 +357,7 @@ class GeminiLiveClient(
                     }
                 })
 
-                if (config.model.contains("3.1")) {
+                if (config.model.contains("gemini-3.1")) {
                     put("historyConfig", buildJsonObject {
                         put("initialHistoryInClientContent", true)
                     })
@@ -463,25 +463,13 @@ class GeminiLiveClient(
     override fun sendClientTurn(text: String, jpegImages: List<ByteArray>, turnComplete: Boolean) {
         if (!isReady) return
 
-        val msg = buildJsonObject {
-            put("clientContent", buildJsonObject {
-                put("turns", buildJsonArray {
-                    add(buildJsonObject {
-                        put("role", "user")
-                        put("parts", buildJsonArray {
-                            add(buildJsonObject { put("text", text) })
-                        })
-                    })
-                })
-                put("turnComplete", turnComplete)
-            })
-        }
-        val raw = msg.toString()
-        trackSentFrame(raw)
-        webSocket?.send(raw)
-
+        // В 3.1 mid-session картинки шлются как видеокадры, а текст через realtimeInput
         for (img in jpegImages) {
             sendVideoFrame(img)
+        }
+
+        if (text.isNotBlank()) {
+            sendRealtimeText(text)
         }
     }
 
