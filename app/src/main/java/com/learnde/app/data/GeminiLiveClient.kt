@@ -99,8 +99,6 @@ class GeminiLiveClient(
     @Volatile
     private var setupWatchdog: Job? = null
 
-    private val wsMutex = Mutex()
-
     @Volatile
     private var lastSetupFrame: String = ""
 
