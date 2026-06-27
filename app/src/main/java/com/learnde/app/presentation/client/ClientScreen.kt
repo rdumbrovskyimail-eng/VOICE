@@ -34,6 +34,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -304,10 +305,28 @@ private fun PromptZone(
 private fun ChatList(messages: List<ConversationMessage>, prefs: ChatPrefs, modifier: Modifier = Modifier) {
     val listState = rememberLazyListState()
     val timeFormatter = remember { SimpleDateFormat("HH:mm", Locale.getDefault()) }
-    LaunchedEffect(messages.size, prefs.autoScroll) {
-        if (prefs.autoScroll && messages.isNotEmpty()) listState.animateScrollToItem(messages.size - 1)
+    // "Прилипать" к низу. Флаг меняется ТОЛЬКО когда пользователь сам докрутил и отпустил,
+    // поэтому дописывание токенов в реплику не сбивает его (нет гонки состояний).
+    var stickToBottom by remember { mutableStateOf(true) }
+    LaunchedEffect(listState) {
+        snapshotFlow { listState.isScrollInProgress }.collect { scrolling ->
+            if (!scrolling) stickToBottom = !listState.canScrollForward
+        }
     }
-    LazyColumn(modifier = modifier, state = listState, verticalArrangement = Arrangement.spacedBy(8.dp), contentPadding = PaddingValues(vertical = 8.dp)) {
+    // Срабатывает и при НОВОМ сообщении (size), и при ДОПИСЫВАНИИ в последнее (lastText) —
+    // именно это чинит "чат не подъезжает, когда говорит Gemini / когда говорю я".
+    val lastText = messages.lastOrNull()?.text
+    LaunchedEffect(messages.size, lastText, prefs.autoScroll) {
+        if (prefs.autoScroll && stickToBottom && messages.isNotEmpty()) {
+            listState.scrollToItem(messages.lastIndex, Int.MAX_VALUE) // к самому низу последней реплики
+        }
+    }
+    LazyColumn(
+        modifier = modifier,
+        state = listState,
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+        contentPadding = PaddingValues(vertical = 8.dp)
+    ) {
         items(messages) { msg -> MessageBubble(msg, prefs, timeFormatter) }
     }
 }
