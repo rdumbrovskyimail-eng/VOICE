@@ -7,7 +7,6 @@ on:
 
 permissions:
   contents: write
-  actions: write # 👈 Добавлено разрешение, необходимое для удаления кэша
 
 jobs:
   build-and-release:
@@ -15,29 +14,6 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
-
-      # 👈 ВОТ НОВЫЙ ШАГ: Принудительно удаляет весь кэш перед сборкой
-      - name: Clear GitHub Actions Cache
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          echo "=== Удаление старого кэша ==="
-          gh cache delete --all || echo "Кэш уже пуст или не найден"
-
-      - name: Debug a1book files
-        run: |
-          echo "=== Текущий коммит ==="
-          git rev-parse HEAD
-          echo "=== Содержимое папки a1book ==="
-          find app/src/main/java/com/learnde/app/learn/sessions/a1book -type f 2>&1 || echo "ПАПКА НЕ НАЙДЕНА"
-          echo "=== Полный текст A1BookSession.kt ==="
-          cat app/src/main/java/com/learnde/app/learn/sessions/a1book/A1BookSession.kt 2>&1 || echo "ФАЙЛ НЕ НАЙДЕН"
-          echo "=== Полный текст LearnSessionRegistry.kt ==="
-          cat app/src/main/java/com/learnde/app/learn/core/LearnSessionRegistry.kt 2>&1 || echo "ФАЙЛ НЕ НАЙДЕН"
-          echo "=== Полный текст A1BookRepository.kt ==="
-          cat app/src/main/java/com/learnde/app/learn/sessions/a1book/A1BookRepository.kt 2>&1 || echo "ФАЙЛ НЕ НАЙДЕН"
-          echo "=== Полный текст A1BookViewModel.kt ==="
-          cat app/src/main/java/com/learnde/app/learn/sessions/a1book/A1BookViewModel.kt 2>&1 || echo "ФАЙЛ НЕ НАЙДЕН"
 
       - uses: actions/setup-java@v4
         with:
@@ -66,11 +42,9 @@ jobs:
       - name: Build Debug APK
         run: |
           gradle assembleDebug \
-            --no-build-cache \
-            --rerun-tasks \
+            --build-cache \
             --max-workers=4 \
-            -Dorg.gradle.jvmargs="-Xmx4g -XX:+UseG1GC -XX:MaxMetaspaceSize=512m" \
-            -Dandroid.enableJetifier=false
+            -Dorg.gradle.jvmargs="-Xmx6g -XX:+UseG1GC -XX:MaxMetaspaceSize=768m"
 
       - name: Calculate APK Size
         id: pack
