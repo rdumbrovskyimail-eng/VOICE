@@ -300,6 +300,12 @@ class GeminiLiveClient(
                     if (config.mediaResolution.isNotBlank()) {
                         put("mediaResolution", config.mediaResolution)
                     }
+                    if (config.inputTranscription) {
+                        put("inputAudioTranscription", buildJsonObject {})
+                    }
+                    if (config.outputTranscription) {
+                        put("outputAudioTranscription", buildJsonObject {})
+                    }
                 })
 
                 if (config.systemInstruction.isNotBlank()) {
@@ -345,13 +351,6 @@ class GeminiLiveClient(
                         put("activityHandling", config.activityHandling)
                     }
                 })
-
-                if (config.inputTranscription) {
-                    put("inputAudioTranscription", buildJsonObject {})
-                }
-                if (config.outputTranscription) {
-                    put("outputAudioTranscription", buildJsonObject {})
-                }
 
                 if (config.model.contains("3.1")) {
                     put("historyConfig", buildJsonObject {
@@ -479,31 +478,15 @@ class GeminiLiveClient(
 
     override fun sendClientTurn(text: String, jpegImages: List<ByteArray>, turnComplete: Boolean) {
         if (!isReady) return
-        val msg = buildJsonObject {
-            put("clientContent", buildJsonObject {
-                put("turns", buildJsonArray {
-                    add(buildJsonObject {
-                        put("role", "user")
-                        put("parts", buildJsonArray {
-                            if (text.isNotBlank()) add(buildJsonObject { put("text", text) })
-                            for (img in jpegImages) {
-                                add(buildJsonObject {
-                                    put("inlineData", buildJsonObject {
-                                        put("mimeType", "image/jpeg")
-                                        put("data", Base64.encodeToString(img, Base64.NO_WRAP))
-                                    })
-                                })
-                            }
-                        })
-                    })
-                })
-                put("turnComplete", turnComplete)
-            })
+
+        // В 3.1 mid-session картинки шлются как видеокадры, а текст через realtimeInput
+        for (img in jpegImages) {
+            sendVideoFrame(img)
         }
-        val raw = msg.toString()
-        logger.d("CLIENT_TURN → text=${text.length} imgs=${jpegImages.size} (${raw.length} chars)")
-        trackSentFrame(raw)
-        webSocket?.send(raw)
+
+        if (text.isNotBlank()) {
+            sendRealtimeText(text)
+        }
     }
 
     override fun sendVideoFrame(jpegBytes: ByteArray) {
