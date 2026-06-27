@@ -68,6 +68,10 @@ class ClientViewModel @Inject constructor(
     }
     fun applyHistoryPrompt(prompt: String) = session.setHistoryPrompt(prompt)
     fun clearHistory() = session.clearHistory()
+
+    fun toggleCamera() = session.setCameraOn(!state.value.cameraOn)
+    fun toggleCamMode() = session.toggleCamMode()
+    fun sendCameraFrame(jpeg: ByteArray) = session.sendCameraFrame(jpeg)
 }
 
 data class HistoryInfo(val prompt: String = "", val locked: Boolean = false)

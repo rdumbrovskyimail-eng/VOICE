@@ -72,13 +72,12 @@ class SessionManager @Inject constructor(
         val transcript: List<ConversationMessage> = emptyList(),
         val error: String? = null,
         val mode: ClientMode = ClientMode.NORMAL,
+        val cameraOn: Boolean = false,
     )
 
     companion object {
-        // Скрытая метка: всё, что начинается с неё, пользователь НАПЕЧАТАЛ (как SMS).
         const val TYPED_PREFIX = "[Пользователь написал это текстом ⌨]"
-        // Скрытая метка: всё, что начинается с неё, пользователь НАПЕЧАТАЛ (как SMS).
-        const val TYPED_PREFIX = "[Пользователь написал это текстом ⌨]"
+        const val CAM_SYSTEM_PROMPT = "Ты видишь живую камеру пользователя в реальном времени (кадры идут потоком). Помогай с тем, что в кадре: коротко описывай, читай и переводи надписи, отвечай на вопросы о происходящем. Будь лаконичен. Если кадр не виден — скажи об этом."
         private const val MAX_MSGS = 80
         private const val AMP_DECAY = 0.82f       // плавное затухание орба
         private const val AMP_TICK_MS = 60L
@@ -167,6 +166,24 @@ class SessionManager @Inject constructor(
             val s = _state.value
             if (s.mode == ClientMode.HISTORY && (s.isConnected || s.isConnecting)) { stopInternal(); startInternal(activePrompt) }
         }
+    }
+
+    // ───────────────────────── Камера ─────────────────────────
+
+    /** Включить/выключить камеру в NORMAL/HISTORY. Перезапуск сессии не нужен — кадры идут поверх. */
+    fun setCameraOn(on: Boolean) { _state.update { it.copy(cameraOn = on) } }
+
+    /** Переключить режим CAM (без привязки к промпту, камера всегда включена). */
+    fun toggleCamMode() {
+        val next = if (_state.value.mode == ClientMode.CAM) ClientMode.NORMAL else ClientMode.CAM
+        setMode(next)
+    }
+
+    /** Отправить JPEG-кадр камеры (источник троттлит до 1 FPS). */
+    fun sendCameraFrame(jpeg: ByteArray) {
+        if (!liveClient.isReady) return
+        if (_state.value.mode != ClientMode.CAM && !_state.value.cameraOn) return
+        runCatching { liveClient.sendVideoFrame(jpeg) }
     }
 
     /** Отправить текстовое сообщение — модель «прочитает» его как SMS и ответит голосом. */
@@ -364,9 +381,11 @@ class SessionManager @Inject constructor(
             vadPrefixPaddingMs = settings.vadPrefixPaddingMs,
             vadSilenceDurationMs = silenceMs,
             activityHandling = settings.activityHandling,
-            systemInstruction = if (_state.value.mode == ClientMode.HISTORY)
-                buildSystemInstruction(settings.historyPrompt, "")
-            else buildSystemInstruction(settings.systemInstruction, prompt),
+            systemInstruction = when (_state.value.mode) {
+                ClientMode.CAM -> CAM_SYSTEM_PROMPT
+                ClientMode.HISTORY -> buildSystemInstruction(settings.historyPrompt, "")
+                else -> buildSystemInstruction(settings.systemInstruction, prompt)
+            },
             inputTranscription = settings.inputTranscription,
             outputTranscription = settings.outputTranscription,
             enableSessionResumption = settings.enableSessionResumption,

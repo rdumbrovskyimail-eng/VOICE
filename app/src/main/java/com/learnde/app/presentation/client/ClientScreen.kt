@@ -20,7 +20,10 @@ import androidx.compose.material.icons.filled.AttachFile
 import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.InsertDriveFile
+import androidx.compose.material.icons.filled.PhotoCamera
+import androidx.compose.material.icons.filled.Videocam
 import androidx.compose.material3.AlertDialog
+import com.learnde.app.presentation.camera.CameraLayer
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.TextButton
 import androidx.compose.animation.AnimatedVisibility
@@ -77,6 +80,7 @@ fun ClientScreen(
     val historyMessages by viewModel.historyMessages.collectAsStateWithLifecycle()
     val historyInfo by viewModel.historyInfo.collectAsStateWithLifecycle()
     val isHistory = state.mode == ClientMode.HISTORY
+    val cameraActive = state.cameraOn || state.mode == ClientMode.CAM
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
 
@@ -132,6 +136,8 @@ fun ClientScreen(
                 state = state,
                 onToggleConnection = { onToggleConnection() },
                 onToggleHistory = { viewModel.toggleHistoryMode() },
+                onToggleCamera = { viewModel.toggleCamera() },
+                onToggleCam = { viewModel.toggleCamMode() },
                 onSettings = { navController.navigate(Routes.SETTINGS) },
                 modifier = Modifier.padding(horizontal = 14.dp)
             )
@@ -195,6 +201,19 @@ fun ClientScreen(
                 }
             }
 
+            // CAMERA PREVIEW (когда камера включена или режим CAM)
+            if (cameraActive) {
+                CameraLayer(
+                    active = true,
+                    onFrame = { viewModel.sendCameraFrame(it) },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(220.dp)
+                        .padding(horizontal = 14.dp, vertical = 6.dp)
+                        .clip(RoundedCornerShape(16.dp)),
+                )
+            }
+
             // 4. CHAT AREA (занимает оставшееся место)
             Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
                 ChatList(
@@ -240,7 +259,7 @@ fun ClientScreen(
 }
 
 @Composable
-private fun Header(state: SessionManager.State, onToggleConnection: () -> Unit, onToggleHistory: () -> Unit, onSettings: () -> Unit, modifier: Modifier = Modifier) {
+private fun Header(state: SessionManager.State, onToggleConnection: () -> Unit, onToggleHistory: () -> Unit, onToggleCamera: () -> Unit, onToggleCam: () -> Unit, onSettings: () -> Unit, modifier: Modifier = Modifier) {
     val dotColor = when {
         state.isConnected -> Color(0xFF66BB6A)
         state.isConnecting -> Color(0xFFFFC107)
@@ -263,6 +282,20 @@ private fun Header(state: SessionManager.State, onToggleConnection: () -> Unit, 
                 if (state.isConnected || state.isConnecting) Icons.Filled.Stop else Icons.Filled.PlayArrow,
                 contentDescription = "Подключить/Отключить",
                 tint = if (state.isConnected || state.isConnecting) Color(0xFFEF5350) else AccentBlue,
+            )
+        }
+        IconButton(onClick = onToggleCamera) {
+            Icon(
+                Icons.Filled.PhotoCamera,
+                contentDescription = "Камера",
+                tint = if (state.cameraOn) AccentBlue else TextDim,
+            )
+        }
+        IconButton(onClick = onToggleCam) {
+            Icon(
+                Icons.Filled.Videocam,
+                contentDescription = "Режим Cam",
+                tint = if (state.mode == ClientMode.CAM) AccentBlue else TextDim,
             )
         }
         val historyOn = state.mode == ClientMode.HISTORY

@@ -9,4 +9,4 @@ package com.learnde.app.session
  *
  * (Режим CAM будет добавлен в следующем дропе камеры.)
  */
-enum class ClientMode { NORMAL, HISTORY }
+enum class ClientMode { NORMAL, HISTORY, CAM }
