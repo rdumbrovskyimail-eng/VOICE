@@ -40,6 +40,9 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import javax.inject.Inject
@@ -54,6 +57,7 @@ class SessionManager @Inject constructor(
     private val orchestrator: ConnectionOrchestrator,
     private val settingsStore: DataStore<AppSettings>,
     private val attachmentProcessor: com.learnde.app.attach.AttachmentProcessor,
+    private val historyDao: com.learnde.app.history.HistoryDao,
     private val logger: AppLogger,
 ) {
 
@@ -67,9 +71,12 @@ class SessionManager @Inject constructor(
         val dashboardText: String = "",
         val transcript: List<ConversationMessage> = emptyList(),
         val error: String? = null,
+        val mode: ClientMode = ClientMode.NORMAL,
     )
 
     companion object {
+        // Скрытая метка: всё, что начинается с неё, пользователь НАПЕЧАТАЛ (как SMS).
+        const val TYPED_PREFIX = "[Пользователь написал это текстом ⌨]"
         // Скрытая метка: всё, что начинается с неё, пользователь НАПЕЧАТАЛ (как SMS).
         const val TYPED_PREFIX = "[Пользователь написал это текстом ⌨]"
         private const val MAX_MSGS = 80
@@ -91,6 +98,14 @@ class SessionManager @Inject constructor(
     @Volatile private var activePrompt: String = ""
     @Volatile private var pendingPromptAttachments: List<android.net.Uri> = emptyList()
     @Volatile private var sendStreamEndOnStop: Boolean = true
+
+    @Volatile private var bargeInEnabled: Boolean = false
+    @Volatile private var historySavedCount = 0
+
+    /** Вся сохранённая история как поток (для UI режима H). */
+    val historyMessages = historyDao.observeAll()
+        .map { rows -> rows.map { ConversationMessage(it.role, it.text) } }
+        .stateIn(appScope, SharingStarted.Eagerly, emptyList())
 
     init {
         wireOrchestratorCallbacks()
@@ -122,6 +137,38 @@ class SessionManager @Inject constructor(
         }
     }
 
+    // ───────────────────────── Режим History (H) ─────────────────────────
+
+    /** Переключить режим. NORMAL = чистый инкогнито; HISTORY = накопительная история. */
+    fun setMode(newMode: ClientMode) {
+        appScope.launch {
+            if (_state.value.mode == newMode) return@launch
+            _state.update { it.copy(mode = newMode) }
+            val s = _state.value
+            if (s.isConnected || s.isConnecting) { stopInternal(); startInternal(activePrompt) }
+        }
+    }
+
+    /** Зафиксировать промпт History (одноразово, до Clear) и поднять сессию с посевом истории. */
+    fun setHistoryPrompt(prompt: String) {
+        appScope.launch {
+            settingsStore.updateData { it.copy(historyPrompt = prompt.trim(), historyPromptLocked = true) }
+            _state.update { it.copy(mode = ClientMode.HISTORY) }
+            stopInternal(); startInternal(activePrompt)
+        }
+    }
+
+    /** Очистить всю историю и разблокировать промпт (Clear после подтверждения). */
+    fun clearHistory() {
+        appScope.launch {
+            historyDao.clear()
+            settingsStore.updateData { it.copy(historyPrompt = "", historyPromptLocked = false) }
+            historySavedCount = 0
+            val s = _state.value
+            if (s.mode == ClientMode.HISTORY && (s.isConnected || s.isConnecting)) { stopInternal(); startInternal(activePrompt) }
+        }
+    }
+
     /** Отправить текстовое сообщение — модель «прочитает» его как SMS и ответит голосом. */
     fun sendText(text: String, attachments: List<android.net.Uri> = emptyList()) {
         val t = text.trim()
@@ -129,8 +176,8 @@ class SessionManager @Inject constructor(
         streamingRole = null
         appScope.launch {
             if (attachments.isEmpty()) {
-                addFinalMessage(ConversationMessage.user(t))           // в чате — чистый текст
-                liveClient.sendRealtimeText("$TYPED_PREFIX $t")        // модель видит метку
+                addFinalMessage(ConversationMessage.user(t))            // в чате — чистый текст
+                liveClient.sendRealtimeText("$TYPED_PREFIX $t")         // модель видит метку
                 orchestrator.onUserTurnEnded()
                 return@launch
             }
@@ -226,17 +273,20 @@ class SessionManager @Inject constructor(
             )
         }
 
+        historySavedCount = 0
+
         // Применяем аудио-настройки к движку (раньше игнорировались).
         audioEngine.setPlaybackVolume(settings.playbackVolume / 100f)
         audioEngine.setMicGain(settings.micGain / 100f)
         audioEngine.setSpeakerRouting(settings.forceSpeakerOutput)
-        audioEngine.setAecEnabled(settings.useAec)
+        audioEngine.setAecEnabled(settings.useAec || settings.bargeInEnabled) // для barge-in AEC обязателен
         audioEngine.updateJitterConfig(
             settings.jitterPreBufferChunks,
             settings.jitterTimeoutMs,
             settings.playbackQueueCapacity,
         )
         sendStreamEndOnStop = settings.sendAudioStreamEnd
+        bargeInEnabled = settings.bargeInEnabled
 
         audioEngine.initPlayback()
         startService()
@@ -314,11 +364,14 @@ class SessionManager @Inject constructor(
             vadPrefixPaddingMs = settings.vadPrefixPaddingMs,
             vadSilenceDurationMs = silenceMs,
             activityHandling = settings.activityHandling,
-            systemInstruction = buildSystemInstruction(settings.systemInstruction, prompt),
+            systemInstruction = if (_state.value.mode == ClientMode.HISTORY)
+                buildSystemInstruction(settings.historyPrompt, "")
+            else buildSystemInstruction(settings.systemInstruction, prompt),
             inputTranscription = settings.inputTranscription,
             outputTranscription = settings.outputTranscription,
             enableSessionResumption = settings.enableSessionResumption,
-            enableContextCompression = settings.enableContextCompression,
+            // В History читаем всю историю целиком — сжатие выключаем.
+            enableContextCompression = _state.value.mode != ClientMode.HISTORY && settings.enableContextCompression,
             compressionTriggerTokens = settings.compressionTriggerTokens,
             compressionTargetTokens = settings.compressionTargetTokens,
             enableGoogleSearch = settings.enableGoogleSearch,
@@ -355,7 +408,10 @@ class SessionManager @Inject constructor(
                     isConnected = link == LinkState.READY,
                     isConnecting = link == LinkState.CONNECTING || link == LinkState.RECOVERING || link == LinkState.ROTATING,
                 ) }
-                if (link == LinkState.READY) flushPromptAttachments()
+                if (link == LinkState.READY) {
+                    flushPromptAttachments()
+                    seedHistoryIfNeeded()
+                }
             }
         }
     }
@@ -378,6 +434,7 @@ class SessionManager @Inject constructor(
                         streamingRole = null
                         _state.update { it.copy(isAiSpeaking = false) }
                         audioEngine.onTurnComplete()
+                        flushHistory()
                     }
 
                     is GeminiEvent.Interrupted -> {
@@ -436,12 +493,14 @@ class SessionManager @Inject constructor(
                 list.add(ConversationMessage(role, text))
                 streamingRole = role
             }
-            st.copy(transcript = list.takeLast(MAX_MSGS))
+            st.copy(transcript = list.takeLast(if (st.mode == ClientMode.HISTORY) Int.MAX_VALUE else MAX_MSGS))
         }
+        flushHistory()
     }
 
     private fun addFinalMessage(msg: ConversationMessage) {
-        _state.update { st -> st.copy(transcript = (st.transcript + msg).takeLast(MAX_MSGS)) }
+        _state.update { st -> st.copy(transcript = (st.transcript + msg).takeLast(if (st.mode == ClientMode.HISTORY) Int.MAX_VALUE else MAX_MSGS)) }
+        flushHistory()
     }
 
     // ───────────────────────── Микрофон ─────────────────────────
