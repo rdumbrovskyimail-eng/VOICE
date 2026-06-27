@@ -49,16 +49,9 @@ class MainActivity : ComponentActivity() {
                     if (needsOnboarding == null) {
                         Box(modifier = Modifier.fillMaxSize().background(Color(0xFF0F1114)))
                     } else {
-                        LaunchedEffect(needsOnboarding) {
-                            if (needsOnboarding == true) {
-                                navController.navigate(Routes.ONBOARDING) {
-                                    popUpTo(0)
-                                }
-                            }
-                        }
                         NavHost(
                             navController = navController,
-                            startDestination = Routes.CLIENT
+                            startDestination = if (needsOnboarding == true) Routes.ONBOARDING else Routes.CLIENT
                         ) {
                             composable(Routes.CLIENT) {
                                 ClientScreen(navController = navController)
