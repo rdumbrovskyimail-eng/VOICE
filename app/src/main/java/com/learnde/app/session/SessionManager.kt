@@ -101,7 +101,6 @@ class SessionManager @Inject constructor(
     @Volatile private var sendStreamEndOnStop: Boolean = true
 
     @Volatile private var bargeInEnabled: Boolean = false
-    @Volatile private var historySavedCount = 0
     private val connectionMutex = Mutex()
     @Volatile private var isHistorySeeded = false
 
@@ -168,7 +167,6 @@ class SessionManager @Inject constructor(
         appScope.launch {
             historyDao.clear()
             settingsStore.updateData { it.copy(historyPrompt = "", historyPromptLocked = false) }
-            historySavedCount = 0
             val s = _state.value
             if (s.mode == ClientMode.HISTORY && (s.isConnected || s.isConnecting)) { stopInternal(); startInternal(activePrompt) }
         }
@@ -298,7 +296,6 @@ class SessionManager @Inject constructor(
             )
         }
 
-        historySavedCount = 0
         isHistorySeeded = false
 
         // Применяем аудио-настройки к движку (раньше игнорировались).
@@ -359,8 +356,6 @@ class SessionManager @Inject constructor(
         // Если задан явный таймаут тишины (>0) — он переопределяет рекомендованный.
         val silenceMs = (if (settings.vadSilenceTimeoutMs > 0) settings.vadSilenceTimeoutMs
             else settings.vadSilenceDurationMs).coerceAtLeast(500)
-
-        val historyConfig = if (settings.model.contains("gemini-3.1")) mapOf("history_mode" to "full") else emptyMap()
 
         // Описываем функцию для Gemini
         val dashboardFunction = com.learnde.app.domain.model.FunctionDeclarationConfig(
