@@ -116,15 +116,11 @@ class ConnectionOrchestrator @Inject constructor(
             }
 
             is GeminiEvent.ConnectionError -> {
-                if (_state.value == LinkState.READY) {
-                    scope?.launch { recover(reason = event.message) }
-                }
+                scope?.launch { recover(reason = event.message) }
             }
 
             is GeminiEvent.Disconnected -> {
-                if (_state.value == LinkState.READY) {
-                    scope?.launch { recover(reason = "ws closed ${event.code}") }
-                }
+                scope?.launch { recover(reason = "ws closed ${event.code}") }
             }
 
             else -> Unit
