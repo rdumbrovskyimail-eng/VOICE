@@ -131,7 +131,7 @@ class GeminiLiveClient(
             lastSetupFrame = ""
             closeCompletion = CompletableDeferred()
 
-            val url = "wss://${SessionConfig.WS_HOST}/${SessionConfig.WS_PATH}?key=$apiKey"
+            val url = "wss://${SessionConfig.WS_HOST}/${SessionConfig.WS_PATH}?key=${apiKey.trim()}"
             logger.d("Connecting to ${config.model}…")
 
             val request = Request.Builder().url(url).build()
@@ -202,6 +202,8 @@ class GeminiLiveClient(
                     val userMsg = if (response?.code == 403) "Ошибка 403: Проверьте API ключ" 
                                   else "Сбой сети: ${t.message}"
                     _events.tryEmit(GeminiEvent.ConnectionError(userMsg))
+                    // Чтобы маршрутизация recover/fail-fast шла единообразно по коду:
+                    _events.tryEmit(GeminiEvent.Disconnected(response?.code ?: 1006, t.message ?: ""))
                 }
             })
         }
@@ -309,16 +311,19 @@ class GeminiLiveClient(
                     if (config.mediaResolution.isNotBlank()) {
                         put("mediaResolution", config.mediaResolution)
                     }
+                })   // ← generationConfig ЗАКРЫТ. Транскрипции внутри быть НЕ должно.
 
-                    // 🔥 ИСПРАВЛЕНИЕ 1: Транскрипция внутри generationConfig
-                    if (config.inputTranscription) put("inputAudioTranscription", buildJsonObject {})
-                    if (config.outputTranscription) put("outputAudioTranscription", buildJsonObject {})
-                })
+                // ✅ Транскрипция — поля ВЕРХНЕГО уровня setup (сиблинги generationConfig).
+                if (config.inputTranscription) put("inputAudioTranscription", buildJsonObject {})
+                if (config.outputTranscription) put("outputAudioTranscription", buildJsonObject {})
 
-                // 🔥 ИСПРАВЛЕНИЕ 2: Разрешаем отправку clientContent для режима History
-                put("historyConfig", buildJsonObject {
-                    put("initialHistoryInClientContent", true)
-                })
+                // historyConfig нужен ТОЛЬКО когда реально засеваем историю через clientContent
+                // (режим History). В NORMAL/CAM не шлём — иначе риск второго 1007 на v1beta.
+                if (config.seedHistoryInClientContent) {
+                    put("historyConfig", buildJsonObject {
+                        put("initialHistoryInClientContent", true)
+                    })
+                }
 
                 if (config.systemInstruction.isNotBlank()) {
                     put("systemInstruction", buildJsonObject {
