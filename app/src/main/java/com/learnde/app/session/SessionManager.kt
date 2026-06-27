@@ -45,6 +45,8 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.math.sqrt
@@ -100,7 +102,7 @@ class SessionManager @Inject constructor(
 
     @Volatile private var bargeInEnabled: Boolean = false
     @Volatile private var historySavedCount = 0
-    private val connectionMutex = kotlinx.coroutines.sync.Mutex()
+    private val connectionMutex = Mutex()
     @Volatile private var isHistorySeeded = false
 
     /** Вся сохранённая история как поток (для UI режима H). */

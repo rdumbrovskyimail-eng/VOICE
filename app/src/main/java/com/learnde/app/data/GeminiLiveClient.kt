@@ -31,6 +31,8 @@ import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
@@ -97,6 +99,8 @@ class GeminiLiveClient(
     @Volatile
     private var setupWatchdog: Job? = null
 
+    private val wsMutex = Mutex()
+
     @Volatile
     private var lastSetupFrame: String = ""
 
@@ -110,10 +114,11 @@ class GeminiLiveClient(
         }
     }
 
-    override suspend fun connect(apiKey: String, config: SessionConfig, logRaw: Boolean) = wsMutex.withLock {
-        if (webSocket != null) disconnect()
+    override suspend fun connect(apiKey: String, config: SessionConfig, logRaw: Boolean) {
+        wsMutex.withLock {
+            if (webSocket != null) disconnect()
 
-        currentConfig = config
+            currentConfig = config
         logRawFrames = logRaw
         isReady = false
         sessionHandle = config.sessionHandle
@@ -187,6 +192,7 @@ class GeminiLiveClient(
                 _events.tryEmit(GeminiEvent.ConnectionError(t.message ?: "Unknown error"))
             }
         })
+        }
     }
 
     private fun dumpDiagnostics(code: Int) {
@@ -234,21 +240,23 @@ class GeminiLiveClient(
         setupWatchdog = null
     }
 
-    override suspend fun disconnect() = wsMutex.withLock {
-        cancelSetupWatchdog()
-        val ws = webSocket
-        if (ws == null) {
+    override suspend fun disconnect() {
+        wsMutex.withLock {
+            cancelSetupWatchdog()
+            val ws = webSocket
+            if (ws == null) {
+                isReady = false
+                return@withLock
+            }
+            val completion = closeCompletion
+            runCatching { ws.close(1000, "bye") }
+            if (completion != null && !completion.isCompleted) {
+                withTimeoutOrNull(2000L) { completion.await() }
+            }
+            webSocket = null
             isReady = false
-            return@withLock
+            closeCompletion = null
         }
-        val completion = closeCompletion
-        runCatching { ws.close(1000, "bye") }
-        if (completion != null && !completion.isCompleted) {
-            withTimeoutOrNull(2000L) { completion.await() }
-        }
-        webSocket = null
-        isReady = false
-        closeCompletion = null
     }
 
     private fun sendSetup(config: SessionConfig) {

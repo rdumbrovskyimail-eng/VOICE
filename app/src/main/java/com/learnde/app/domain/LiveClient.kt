@@ -16,8 +16,6 @@ interface LiveClient {
 
     fun sendAudio(pcmData: ByteArray)
 
-    fun sendText(text: String)
-
     fun sendRealtimeText(text: String)
 
     fun sendVideoFrame(jpegBytes: ByteArray)

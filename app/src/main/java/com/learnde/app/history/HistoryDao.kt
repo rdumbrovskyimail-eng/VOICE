@@ -20,7 +20,13 @@ interface HistoryDao {
     @Insert
     suspend fun insert(msg: HistoryMessage): Long
 
-    @androidx.room.Insert(onConflict = androidx.room.OnConflictStrategy.REPLACE)
+
+
+    /** Полная очистка (кнопка Clear). */
+    @Query("DELETE FROM history_messages")
+    suspend fun clear()
+
+    @Insert(onConflict = androidx.room.OnConflictStrategy.REPLACE)
     suspend fun insertAll(messages: List<HistoryMessage>)
 
     @androidx.room.Transaction
@@ -28,10 +34,6 @@ interface HistoryDao {
         clear()
         insertAll(messages)
     }
-
-    /** Полная очистка (кнопка Clear). */
-    @Query("DELETE FROM history_messages")
-    suspend fun clear()
 
     @Query("SELECT COUNT(*) FROM history_messages")
     suspend fun count(): Int

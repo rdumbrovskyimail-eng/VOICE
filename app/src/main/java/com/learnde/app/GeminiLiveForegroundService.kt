@@ -186,7 +186,7 @@ class GeminiLiveForegroundService : Service() {
     override fun onTaskRemoved(rootIntent: Intent?) {
         super.onTaskRemoved(rootIntent)
         // Свайп из «недавних» → полностью гасим сессию, а не только сервис.
-        runBlocking { runCatching { sessionManager.shutdown() } }
+        kotlinx.coroutines.runBlocking { runCatching { sessionManager.shutdown() } }
         releaseAudioFocus()
         stopForeground(STOP_FOREGROUND_REMOVE)
         stopSelf()

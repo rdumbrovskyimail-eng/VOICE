@@ -310,7 +310,6 @@ private fun ThinkingPickerField(selectedName: String, onSelect: (String) -> Unit
 }
 
 private fun thinkingHint(p: LatencyProfile): String = when (p) {
-    LatencyProfile.Off       -> "Без размышления. Самый быстрый ответ, минимум задержки."
     LatencyProfile.UltraLow  -> "Почти без размышления. Очень быстро, для простых реплик."
     LatencyProfile.Low       -> "Лёгкое размышление. Баланс скорости и качества (по умолчанию)."
     LatencyProfile.Balanced  -> "Среднее размышление. Точнее на сложных вопросах, чуть медленнее."
