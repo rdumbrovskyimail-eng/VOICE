@@ -22,6 +22,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.learnde.app.data.voice.VoiceCatalog
+import com.learnde.app.domain.model.LatencyProfile
 
 private val BgColor = Color(0xFF0F1114)
 private val SurfaceColor = Color(0xFF181B20)
