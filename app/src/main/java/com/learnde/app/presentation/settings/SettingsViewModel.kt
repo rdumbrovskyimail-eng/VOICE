@@ -21,7 +21,7 @@ class SettingsViewModel @Inject constructor(
         AppSettings()
     )
 
-    fun updateApiKey(key: String) = viewModelScope.launch { settingsStore.updateData { it.copy(apiKey = key) } }
+    fun updateApiKey(key: String) = viewModelScope.launch { settingsStore.updateData { it.copy(apiKey = key.trim()) } }
     fun updateModel(model: String) = viewModelScope.launch { settingsStore.updateData { it.copy(model = model) } }
     
     fun updateVoice(voice: String) = viewModelScope.launch { settingsStore.updateData { it.copy(voiceId = voice) } }
