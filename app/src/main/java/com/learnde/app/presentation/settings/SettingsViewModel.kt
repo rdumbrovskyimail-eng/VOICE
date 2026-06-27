@@ -32,6 +32,7 @@ class SettingsViewModel @Inject constructor(
     fun updateTemperature(temp: Float) = viewModelScope.launch { settingsStore.updateData { it.copy(temperature = temp) } }
     fun updateLatencyProfile(profile: String) = viewModelScope.launch { settingsStore.updateData { it.copy(latencyProfile = profile) } }
     fun updateGoogleSearch(enable: Boolean) = viewModelScope.launch { settingsStore.updateData { it.copy(enableGoogleSearch = enable) } }
+    fun updateBargeIn(enable: Boolean) = viewModelScope.launch { settingsStore.updateData { it.copy(bargeInEnabled = enable) } }
     
     fun updateContextCompression(enable: Boolean) = viewModelScope.launch { settingsStore.updateData { it.copy(enableContextCompression = enable) } }
     fun updateVadSilence(ms: String) = viewModelScope.launch { 
