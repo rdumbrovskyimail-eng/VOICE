@@ -18,7 +18,9 @@
         </intent>
     </queries>
 
+    <!-- Android 13+ READ_MEDIA_IMAGES для импорта PNG-фона сцены -->
     <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
+    <!-- Legacy для Android ≤ 12 -->
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE"
         android:maxSdkVersion="32" />
 
@@ -46,6 +48,7 @@
             android:configChanges="screenSize|smallestScreenSize|screenLayout|orientation|density"
             android:windowSoftInputMode="adjustResize"
             tools:ignore="LockedOrientationActivity">
+
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
@@ -61,5 +64,7 @@
             android:name="com.google.ar.core"
             android:value="optional"
             tools:replace="android:value" />
+
     </application>
+
 </manifest>
