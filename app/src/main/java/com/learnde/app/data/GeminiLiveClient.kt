@@ -1,13 +1,3 @@
-// Путь: app/src/main/java/com/learnde/app/data/GeminiLiveClient.kt
-//
-// Изменение относительно исходной версии — ТОЛЬКО блок contextWindowCompression в buildFullSetup:
-//   Было: либо triggerTokens, либо slidingWindow.targetTokens (either/or) и только если токены > 0
-//         → при дефолтных 0 конфиг вообще НЕ эмитился, сессия упиралась в лимит ~15 минут.
-//   Стало: всегда (если enableContextCompression) эмитятся ОБА поля как siblings —
-//         triggerTokens (когда сжимать) И slidingWindow.targetTokens (до скольки сжимать),
-//         с рабочими дефолтами 25600 / 8192, если в конфиге 0.
-// Всё остальное идентично исходнику.
-
 package com.learnde.app.data
 
 import android.util.Base64
@@ -134,79 +124,86 @@ class GeminiLiveClient(
             if (webSocket != null) disconnectInternal()
 
             currentConfig = config
-        logRawFrames = logRaw
-        isReady = false
-        sessionHandle = config.sessionHandle
-        synchronized(lastSentFrames) { lastSentFrames.clear() }
-        lastSetupFrame = ""
-        closeCompletion = CompletableDeferred()
+            logRawFrames = logRaw
+            isReady = false
+            sessionHandle = config.sessionHandle
+            synchronized(lastSentFrames) { lastSentFrames.clear() }
+            lastSetupFrame = ""
+            closeCompletion = CompletableDeferred()
 
-        val url = "wss://${SessionConfig.WS_HOST}/${SessionConfig.WS_PATH}?key=$apiKey"
-        logger.d("Connecting to ${config.model}…")
+            val url = "wss://${SessionConfig.WS_HOST}/${SessionConfig.WS_PATH}?key=$apiKey"
+            logger.d("Connecting to ${config.model}…")
 
-        val request = Request.Builder().url(url).build()
+            val request = Request.Builder().url(url).build()
 
-        webSocket = client.newWebSocket(request, object : WebSocketListener() {
+            webSocket = client.newWebSocket(request, object : WebSocketListener() {
 
-            override fun onOpen(ws: WebSocket, response: okhttp3.Response) {
-                logger.d("WS opened (${response.code}) — sending setup, waiting for setupComplete…")
-                _events.tryEmit(GeminiEvent.Connected)
-                sendSetup(config)
-                startSetupWatchdog(config.setupTimeoutMs)
-            }
-
-            override fun onMessage(ws: WebSocket, text: String) {
-                if (logRawFrames) {
-                    val preview = if (text.length > 500) text.take(500) + "…" else text
-                    logger.d("RAW ← $preview")
-                }
-                parseServerMessage(text)
-            }
-
-            override fun onMessage(ws: WebSocket, bytes: ByteString) {
-                try {
-                    parseServerMessage(bytes.utf8())
-                } catch (e: Exception) {
-                    logger.e("Binary frame decode error: ${e.message}")
-                }
-            }
-
-            override fun onClosing(ws: WebSocket, code: Int, reason: String) {
-                logger.d("WS closing: $code '$reason' — acknowledging")
-                runCatching { ws.close(1000, null) }
-            }
-
-            override fun onClosed(ws: WebSocket, code: Int, reason: String) {
-                val desc = describeCloseCode(code)
-                logger.d("WS closed: $code $desc reason='$reason'")
-
-                if (code == 1007 || code == 1008) {
-                    dumpDiagnostics(code)
+                override fun onOpen(ws: WebSocket, response: okhttp3.Response) {
+                    logger.d("🟢 WS OPENED: HTTP ${response.code} ${response.message}")
+                    _events.tryEmit(GeminiEvent.Connected)
+                    sendSetup(config)
+                    startSetupWatchdog(config.setupTimeoutMs)
                 }
 
-                cancelSetupWatchdog()
-                isReady = false
-                closeCompletion?.complete(Unit)
-                if (code != 1000 && code != 1001) {
-                    _events.tryEmit(
-                        GeminiEvent.ConnectionError(
-                            "WS closed $code: $desc ${reason.ifBlank { "" }}"
+                override fun onMessage(ws: WebSocket, text: String) {
+                    if (logRawFrames) {
+                        val preview = if (text.length > 500) text.take(500) + "…" else text
+                        logger.d("⬇️ RAW RECV: $preview")
+                    }
+                    parseServerMessage(text)
+                }
+
+                override fun onMessage(ws: WebSocket, bytes: ByteString) {
+                    try {
+                        parseServerMessage(bytes.utf8())
+                    } catch (e: Exception) {
+                        logger.e("❌ Binary frame decode error: ${e.message}")
+                    }
+                }
+
+                override fun onClosing(ws: WebSocket, code: Int, reason: String) {
+                    logger.w("🟡 WS CLOSING: Code $code, Reason: '$reason'")
+                    runCatching { ws.close(1000, null) }
+                }
+
+                override fun onClosed(ws: WebSocket, code: Int, reason: String) {
+                    val desc = describeCloseCode(code)
+                    logger.e("🔴 WS CLOSED: Code $code ($desc), Reason: '$reason'")
+
+                    if (code == 1007 || code == 1008) {
+                        dumpDiagnostics(code)
+                    }
+
+                    cancelSetupWatchdog()
+                    isReady = false
+                    closeCompletion?.complete(Unit)
+                    
+                    if (code != 1000 && code != 1001) {
+                        _events.tryEmit(
+                            GeminiEvent.ConnectionError(
+                                "Связь прервана ($code): $desc ${reason.ifBlank { "" }}"
+                            )
                         )
-                    )
+                    }
+                    _events.tryEmit(GeminiEvent.Disconnected(code, reason))
                 }
-                _events.tryEmit(GeminiEvent.Disconnected(code, reason))
-            }
 
-            override fun onFailure(ws: WebSocket, t: Throwable, response: okhttp3.Response?) {
-                val status = response?.code?.let { " (HTTP $it)" } ?: ""
-                logger.e("WS failure$status: ${t.message}")
-                cancelSetupWatchdog()
-                isReady = false
-                webSocket = null
-                closeCompletion?.complete(Unit)
-                _events.tryEmit(GeminiEvent.ConnectionError(t.message ?: "Unknown error"))
-            }
-        })
+                override fun onFailure(ws: WebSocket, t: Throwable, response: okhttp3.Response?) {
+                    val status = response?.code?.let { "HTTP $it ${response.message}" } ?: "No HTTP response"
+                    logger.e("💥 WS FAILURE: $status | Exception: ${t.message}", t)
+                    
+                    response?.headers?.let { logger.e("💥 Headers: $it") }
+
+                    cancelSetupWatchdog()
+                    isReady = false
+                    webSocket = null
+                    closeCompletion?.complete(Unit)
+                    
+                    val userMsg = if (response?.code == 403) "Ошибка 403: Проверьте API ключ" 
+                                  else "Сбой сети: ${t.message}"
+                    _events.tryEmit(GeminiEvent.ConnectionError(userMsg))
+                }
+            })
         }
     }
 
@@ -313,10 +310,15 @@ class GeminiLiveClient(
                         put("mediaResolution", config.mediaResolution)
                     }
 
+                    // 🔥 ИСПРАВЛЕНИЕ 1: Транскрипция внутри generationConfig
+                    if (config.inputTranscription) put("inputAudioTranscription", buildJsonObject {})
+                    if (config.outputTranscription) put("outputAudioTranscription", buildJsonObject {})
                 })
 
-                if (config.inputTranscription) put("inputAudioTranscription", buildJsonObject {})
-                if (config.outputTranscription) put("outputAudioTranscription", buildJsonObject {})
+                // 🔥 ИСПРАВЛЕНИЕ 2: Разрешаем отправку clientContent для режима History
+                put("historyConfig", buildJsonObject {
+                    put("initialHistoryInClientContent", true)
+                })
 
                 if (config.systemInstruction.isNotBlank()) {
                     put("systemInstruction", buildJsonObject {
@@ -368,14 +370,6 @@ class GeminiLiveClient(
                     })
                 }
 
-                // ─────────────────────────────────────────────────────────────
-                // ★ ИСПРАВЛЕННЫЙ БЛОК СЖАТИЯ КОНТЕКСТА.
-                // Эмитим оба поля одновременно (siblings), как требует Live API:
-                //   triggerTokens          — порог, при котором запускается сжатие;
-                //   slidingWindow.targetTokens — до какого размера сжимать историю.
-                // Дефолты 25600 / 8192 применяются, если в конфиге стоит 0.
-                // Это снимает лимит сессии ~15 минут.
-                // ─────────────────────────────────────────────────────────────
                 if (config.enableContextCompression) {
                     val triggerTokens =
                         if (config.compressionTriggerTokens > 0L) config.compressionTriggerTokens
@@ -462,7 +456,6 @@ class GeminiLiveClient(
     override fun sendClientTurn(text: String, jpegImages: List<ByteArray>, turnComplete: Boolean) {
         if (!isReady) return
 
-        // В 3.1 mid-session картинки шлются как видеокадры, а текст через realtimeInput
         for (img in jpegImages) {
             sendVideoFrame(img)
         }
