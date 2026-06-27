@@ -1,14 +1,15 @@
 // Путь: app/src/main/java/com/learnde/app/GeminiLiveForegroundService.kt
 //
-// Изменения относительно исходной версии:
-//   • Аудио-фокус запрашивается через AudioFocusRequest c USAGE_MEDIA (а не STREAM_VOICE_CALL),
-//     согласованно с воспроизведением AudioTrack (которое теперь тоже USAGE_MEDIA).
-//   • MODE_NORMAL (убран MODE_IN_COMMUNICATION) — он завышал маршрут в тихий звонковый поток.
-//   • Убрана ручная маршрутизация setCommunicationDevice/Bluetooth SCO: для USAGE_MEDIA
-//     система сама шлёт звук на динамик (или наушники, если подключены) на полной громкости.
-//   • Сохранены startIntent(context, forceSpeaker) / stopIntent(context), нотификация,
-//     FOREGROUND_SERVICE_TYPE_MICROPHONE|MEDIA_PLAYBACK — сервис стартует ДО захвата мика
-//     (требование Android 12+ для микрофона из foreground).
+// Изменения этой версии (поверх исходной):
+//   • ИСПРАВЛЕН «тихий звук после закрытия»: при свайпе из недавних (onTaskRemoved) и при
+//     нажатии «Стоп» в шторке сервис теперь ВЫЗЫВАЕТ sessionManager.shutdown() — закрывает
+//     WebSocket и освобождает аудио-движок. Раньше глушился только сервис, а сессия (синглтон)
+//     продолжала играть звук в фоне.
+//   • Кнопка уведомления использует новое действие ACTION_USER_STOP (полный стоп), а внутренний
+//     ACTION_STOP (его шлёт SessionManager.stopService) только гасит сервис — это исключает
+//     зацикливание stop → stop.
+//   • Android 9 hardening: если startForeground падает — вызываем stopSelf(), чтобы не словить
+//     ANR «did not call startForeground» на старых устройствах.
 
 package com.learnde.app
 
@@ -26,17 +27,23 @@ import android.media.AudioManager
 import android.os.Build
 import android.os.IBinder
 import androidx.core.app.NotificationCompat
+import com.learnde.app.session.SessionManager
 import dagger.hilt.android.AndroidEntryPoint
+import javax.inject.Inject
 
 @AndroidEntryPoint
 class GeminiLiveForegroundService : Service() {
+
+    // Hilt-инъекция владельца сессии (синглтон). Через него глушим WS + аудио.
+    @Inject lateinit var sessionManager: SessionManager
 
     companion object {
         private const val CHANNEL_ID = "gemini_live_channel"
         private const val NOTIFICATION_ID = 2026
 
         const val ACTION_START = "com.learnde.app.ACTION_START_SESSION"
-        const val ACTION_STOP = "com.learnde.app.ACTION_STOP_SESSION"
+        const val ACTION_STOP = "com.learnde.app.ACTION_STOP_SESSION"          // внутренний (из SessionManager)
+        const val ACTION_USER_STOP = "com.learnde.app.ACTION_USER_STOP_SESSION" // пользователь нажал «Стоп»
         const val EXTRA_FORCE_SPEAKER = "extra_force_speaker"
 
         fun startIntent(context: Context, forceSpeaker: Boolean = true): Intent =
@@ -65,7 +72,15 @@ class GeminiLiveForegroundService : Service() {
 
         when (intent?.action) {
             ACTION_START -> requestMediaAudioFocus()
+            ACTION_USER_STOP -> {
+                // Пользователь нажал «Стоп» в шторке → полный стоп сессии.
+                runCatching { sessionManager.shutdown() }
+                releaseAudioFocus()
+                stopForeground(STOP_FOREGROUND_REMOVE)
+                stopSelf()
+            }
             ACTION_STOP -> {
+                // Внутренний стоп (сессия уже останавливается сама) → только гасим сервис.
                 releaseAudioFocus()
                 stopForeground(STOP_FOREGROUND_REMOVE)
                 stopSelf()
@@ -88,10 +103,13 @@ class GeminiLiveForegroundService : Service() {
                             ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK
                 )
             } else {
+                // Android 9 / 10 (API 28/29-): 2-аргументная версия без типа сервиса.
                 startForeground(NOTIFICATION_ID, buildNotification())
             }
         } catch (e: Exception) {
             android.util.Log.e("FGS", "startForeground failed: ${e.message}")
+            // На Android 9 невызов startForeground вовремя = ANR. Гасим сервис, не оставляем «висеть».
+            stopSelf()
         }
     }
 
@@ -132,7 +150,7 @@ class GeminiLiveForegroundService : Service() {
         val stopPendingIntent = PendingIntent.getService(
             this, 1,
             Intent(this, GeminiLiveForegroundService::class.java).apply {
-                action = ACTION_STOP
+                action = ACTION_USER_STOP
             },
             PendingIntent.FLAG_IMMUTABLE
         )
@@ -166,6 +184,8 @@ class GeminiLiveForegroundService : Service() {
 
     override fun onTaskRemoved(rootIntent: Intent?) {
         super.onTaskRemoved(rootIntent)
+        // Свайп из «недавних» → полностью гасим сессию, а не только сервис.
+        runCatching { sessionManager.shutdown() }
         releaseAudioFocus()
         stopForeground(STOP_FOREGROUND_REMOVE)
         stopSelf()
