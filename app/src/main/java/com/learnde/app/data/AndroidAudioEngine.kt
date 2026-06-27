@@ -339,12 +339,12 @@ class AndroidAudioEngine @Inject constructor(
                         }
                         for (buffered in preBuffer) {
                             _playbackSync.tryEmit(buffered)
-                            synchronized(trackLock) { runCatching { track.write(buffered, 0, buffered.size) } }
+                            runCatching { track.write(buffered, 0, buffered.size) }
                         }
                         isFirstBatch = false
                     } else {
                         _playbackSync.tryEmit(chunk)
-                        synchronized(trackLock) { runCatching { track.write(chunk, 0, chunk.size) } }
+                        runCatching { track.write(chunk, 0, chunk.size) }
                     }
                     if (awaitingDrain && playbackChannel.isEmpty) {
                         awaitingDrain = false
@@ -385,7 +385,7 @@ class AndroidAudioEngine @Inject constructor(
             audioTrack?.apply {
                 runCatching { 
                     if (state == AudioTrack.STATE_INITIALIZED) {
-                        pause(); flush(); play() 
+                        pause(); flush()
                     }
                 }
             }
