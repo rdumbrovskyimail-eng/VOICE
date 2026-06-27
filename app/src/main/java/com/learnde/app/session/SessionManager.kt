@@ -67,6 +67,7 @@ class SessionManager @Inject constructor(
         val link: LinkState = LinkState.IDLE,
         val isConnected: Boolean = false,
         val isConnecting: Boolean = false,
+        val isRecovering: Boolean = false,
         val isMicActive: Boolean = false,
         val isAiSpeaking: Boolean = false,
         val activePrompt: String = "",
