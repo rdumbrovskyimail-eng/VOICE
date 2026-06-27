@@ -29,7 +29,7 @@ data class SessionConfig(
     val temperature: Float = 0.8f,
     val topP: Float = 0.95f,
     val topK: Int = 0,
-    val maxOutputTokens: Int = 8192,
+    val maxOutputTokens: Int = 65536,
     val voiceId: String = "Sulafat",
     val languageCode: String = "",
     val latencyProfile: LatencyProfile = LatencyProfile.Low,
