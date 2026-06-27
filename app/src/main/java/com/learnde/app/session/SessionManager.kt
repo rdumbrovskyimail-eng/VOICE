@@ -402,6 +402,7 @@ class SessionManager @Inject constructor(
             enableGoogleSearch = settings.enableGoogleSearch,
             functionDeclarations = listOf(dashboardFunction), // ИСПРАВЛЕНО: передаем список напрямую
             sendAudioStreamEnd = settings.sendAudioStreamEnd,
+            seedHistoryInClientContent = _state.value.mode == ClientMode.HISTORY,
         )
     }
 
@@ -431,7 +432,10 @@ class SessionManager @Inject constructor(
                 _state.update { it.copy(
                     link = link,
                     isConnected = link == LinkState.READY,
-                    isConnecting = link == LinkState.CONNECTING || link == LinkState.RECOVERING || link == LinkState.ROTATING,
+                    // Первичный коннект — только CONNECTING. RECOVERING/ROTATING — это уже
+                    // восстановление, его стоит показывать иначе (см. UI ниже), а не как "Подключение…".
+                    isConnecting = link == LinkState.CONNECTING,
+                    isRecovering = link == LinkState.RECOVERING || link == LinkState.ROTATING,
                 ) }
                 if (link == LinkState.READY) {
                     if (liveClient.sessionHandle == null && !isHistorySeeded) {
