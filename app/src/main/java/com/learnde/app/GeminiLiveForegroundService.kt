@@ -28,6 +28,7 @@ import android.os.Build
 import android.os.IBinder
 import androidx.core.app.NotificationCompat
 import com.learnde.app.session.SessionManager
+import kotlinx.coroutines.runBlocking
 import dagger.hilt.android.AndroidEntryPoint
 import javax.inject.Inject
 
@@ -158,7 +159,7 @@ class GeminiLiveForegroundService : Service() {
         return NotificationCompat.Builder(this, CHANNEL_ID)
             .setContentTitle("Голосовой ассистент активен")
             .setContentText("Микрофон включён")
-            .setSmallIcon(android.R.drawable.ic_btn_speak_now)
+            .setSmallIcon(R.mipmap.ic_launcher)
             .setContentIntent(pendingIntent)
             .addAction(android.R.drawable.ic_media_pause, "Стоп", stopPendingIntent)
             .setOngoing(true)
@@ -185,7 +186,7 @@ class GeminiLiveForegroundService : Service() {
     override fun onTaskRemoved(rootIntent: Intent?) {
         super.onTaskRemoved(rootIntent)
         // Свайп из «недавних» → полностью гасим сессию, а не только сервис.
-        runCatching { sessionManager.shutdown() }
+        runBlocking { runCatching { sessionManager.shutdown() } }
         releaseAudioFocus()
         stopForeground(STOP_FOREGROUND_REMOVE)
         stopSelf()

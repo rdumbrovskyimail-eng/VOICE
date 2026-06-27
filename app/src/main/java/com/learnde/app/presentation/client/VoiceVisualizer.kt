@@ -28,7 +28,7 @@ import androidx.compose.ui.graphics.Color
 
 @Composable
 fun VoiceVisualizer(
-    amplitude: Float,
+    amplitudeProvider: () -> Float,
     isActive: Boolean,
     modifier: Modifier = Modifier,
 ) {
@@ -44,9 +44,9 @@ fun VoiceVisualizer(
     )
 
     // Сглаженная реакция на амплитуду (резкие скачки RMS превращаем в плавную пульсацию).
-    val reactive by animateFloatAsState(
-        targetValue = if (isActive) amplitude.coerceIn(0f, 1f) else 0f,
-        animationSpec = tween(120),
+    val animatedAmplitude by animateFloatAsState(
+        targetValue = if (isActive) amplitudeProvider().coerceIn(0f, 1f) else 0f,
+        animationSpec = tween(150),
         label = "amp",
     )
 
@@ -62,14 +62,14 @@ fun VoiceVisualizer(
             val base = minOf(size.width, size.height) / 2f
             // Защита: при нулевом размере Canvas radialGradient с radius=0 бросает исключение.
             if (base <= 0f) return@Canvas
-            val scale = breath * (1f + reactive * 0.55f)
+            val scale = breath * (1f + animatedAmplitude * 0.55f)
             val r = (base * 0.60f * scale).coerceAtLeast(1f)
             val center = Offset(cx, cy)
 
             // Внешнее свечение — несколько слоёв вместо blur.
             for (i in 3 downTo 1) {
                 val rr = (r * (1f + i * 0.22f)).coerceAtLeast(0.1f)
-                val a = (0.10f * i * (0.5f + reactive)).coerceIn(0f, 0.6f)
+                val a = (0.10f * i * (0.5f + animatedAmplitude)).coerceIn(0f, 0.6f)
                 drawCircle(
                     brush = Brush.radialGradient(
                         colors = listOf(mid.copy(alpha = a), Color.Transparent),

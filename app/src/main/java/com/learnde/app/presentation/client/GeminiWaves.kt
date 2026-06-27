@@ -14,7 +14,7 @@ import kotlin.math.sin
 
 @Composable
 fun GeminiWaves(
-    amplitude: Float,
+    amplitudeProvider: () -> Float,
     isActive: Boolean,
     modifier: Modifier = Modifier
 ) {
@@ -24,7 +24,7 @@ fun GeminiWaves(
         initialValue = 0f,
         targetValue = 2f * Math.PI.toFloat(),
         animationSpec = infiniteRepeatable(
-            animation = tween(if (isActive && amplitude > 0.1f) 2000 else 6000, easing = LinearEasing),
+            animation = tween(if (isActive && amplitudeProvider() > 0.1f) 2000 else 6000, easing = LinearEasing),
             repeatMode = RepeatMode.Restart
         ),
         label = "time"
@@ -32,7 +32,7 @@ fun GeminiWaves(
 
     // Сглаживаем амплитуду
     val animatedAmplitude by animateFloatAsState(
-        targetValue = if (isActive) amplitude.coerceIn(0f, 1f) else 0f,
+        targetValue = if (isActive) amplitudeProvider().coerceIn(0f, 1f) else 0f,
         animationSpec = tween(150),
         label = "amp"
     )

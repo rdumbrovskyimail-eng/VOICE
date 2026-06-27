@@ -20,6 +20,15 @@ interface HistoryDao {
     @Insert
     suspend fun insert(msg: HistoryMessage): Long
 
+    @androidx.room.Insert(onConflict = androidx.room.OnConflictStrategy.REPLACE)
+    suspend fun insertAll(messages: List<HistoryMessage>)
+
+    @androidx.room.Transaction
+    suspend fun replaceHistory(messages: List<HistoryMessage>) {
+        clear()
+        insertAll(messages)
+    }
+
     /** Полная очистка (кнопка Clear). */
     @Query("DELETE FROM history_messages")
     suspend fun clear()

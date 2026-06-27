@@ -24,19 +24,8 @@ enum class ThemeMode { AUTO, LIGHT, DARK }
 
 @Serializable
 data class AppSettings(
-    // ─────────── Профиль / обучение ───────────
-    val userName: String = "",
-    val learningGoals: String = "",
-    val learningTopics: String = "",
-    val a1DataImported: Boolean = false,
-    val a1DataVersion: Int = 0,
-    val testPassed: Boolean = false,
-
     // ─────────── Ключи / модель ───────────
     val apiKey: String = "",
-    val tutorApiKey: String = "",
-    val tutorModel: String = "gemini-3.1-flash-lite",
-    val enableTutorHints: Boolean = true,
     val model: String = "models/gemini-3.1-flash-live-preview",
 
     // ─────────── Генерация ───────────
@@ -65,7 +54,6 @@ data class AppSettings(
 
     // ─────────── Жизненный цикл сессии ───────────
     val enableSessionResumption: Boolean = true,
-    val transparentResumption: Boolean = true,
     val enableContextCompression: Boolean = true,
     // Включено по умолчанию → снимает лимит ~15 минут (sliding window).
     val compressionTriggerTokens: Long = 25_600L,
@@ -73,7 +61,6 @@ data class AppSettings(
     val maxReconnectAttempts: Int = 5,
     val reconnectBaseDelayMs: Long = 2_000L,
     val reconnectMaxDelayMs: Long = 30_000L,
-    val sessionHeartbeatMs: Long = 0L,
 
     // ─────────── VAD (детекция речи) ───────────
     val enableServerVad: Boolean = true,

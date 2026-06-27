@@ -94,7 +94,7 @@ fun SettingsScreen(
                     label = "Чувствительность микрофона: ${settings.micGain}%",
                     value = settings.micGain.toFloat(),
                     onValueChange = viewModel::updateMicGain,
-                    valueRange = 50f..200f
+                    valueRange = 50f..150f
                 )
             }
 

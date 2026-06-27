@@ -100,6 +100,8 @@ class SessionManager @Inject constructor(
 
     @Volatile private var bargeInEnabled: Boolean = false
     @Volatile private var historySavedCount = 0
+    private val connectionMutex = kotlinx.coroutines.sync.Mutex()
+    @Volatile private var isHistorySeeded = false
 
     /** Вся сохранённая история как поток (для UI режима H). */
     val historyMessages = historyDao.observeAll()
@@ -130,9 +132,11 @@ class SessionManager @Inject constructor(
 
     fun toggleConnection() {
         appScope.launch {
-            val s = _state.value
-            if (s.isConnected || s.isConnecting) stopInternal()
-            else startInternal(activePrompt)
+            connectionMutex.withLock {
+                val s = _state.value
+                if (s.isConnected || s.isConnecting) stopInternal()
+                else startInternal(activePrompt)
+            }
         }
     }
 
@@ -183,6 +187,8 @@ class SessionManager @Inject constructor(
     fun sendCameraFrame(jpeg: ByteArray) {
         if (!liveClient.isReady) return
         if (_state.value.mode != ClientMode.CAM && !_state.value.cameraOn) return
+        if (!_state.value.isMicActive) return
+        if (!_state.value.isAiSpeaking && _amplitude.value < 0.05f) return
         runCatching { liveClient.sendVideoFrame(jpeg) }
     }
 
@@ -291,6 +297,7 @@ class SessionManager @Inject constructor(
         }
 
         historySavedCount = 0
+        isHistorySeeded = false
 
         // Применяем аудио-настройки к движку (раньше игнорировались).
         audioEngine.setPlaybackVolume(settings.playbackVolume / 100f)
@@ -351,6 +358,8 @@ class SessionManager @Inject constructor(
         val silenceMs = (if (settings.vadSilenceTimeoutMs > 0) settings.vadSilenceTimeoutMs
             else settings.vadSilenceDurationMs).coerceAtLeast(500)
 
+        val historyConfig = if (settings.model.contains("gemini-3.1")) mapOf("history_mode" to "full") else emptyMap()
+
         // Описываем функцию для Gemini
         val dashboardFunction = com.learnde.app.domain.model.FunctionDeclarationConfig(
             name = "update_dashboard",
@@ -396,6 +405,7 @@ class SessionManager @Inject constructor(
             enableGoogleSearch = settings.enableGoogleSearch,
             functionDeclarations = listOf(dashboardFunction), // ИСПРАВЛЕНО: передаем список напрямую
             sendAudioStreamEnd = settings.sendAudioStreamEnd,
+            additionalParams = if (historyConfig.isNotEmpty()) mapOf("historyConfig" to historyConfig) else emptyMap(),
         )
     }
 
@@ -428,10 +438,12 @@ class SessionManager @Inject constructor(
                     isConnecting = link == LinkState.CONNECTING || link == LinkState.RECOVERING || link == LinkState.ROTATING,
                 ) }
                 if (link == LinkState.READY) {
-                    // ДОБАВЛЕНА ПРОВЕРКА: отправляем начальный контекст только для новой сессии
-                    if (liveClient.sessionHandle == null) {
-                        flushPromptAttachments()
-                        seedHistoryIfNeeded()
+                    if (liveClient.sessionHandle == null && !isHistorySeeded) {
+                        isHistorySeeded = true
+                        appScope.launch {
+                            seedHistoryIfNeeded()
+                            flushPromptAttachments()
+                        }
                     }
                 }
             }
@@ -515,14 +527,12 @@ class SessionManager @Inject constructor(
                 list.add(ConversationMessage(role, text))
                 streamingRole = role
             }
-            st.copy(transcript = list.takeLast(if (st.mode == ClientMode.HISTORY) Int.MAX_VALUE else MAX_MSGS))
+            st.copy(transcript = list.takeLast(MAX_MSGS))
         }
-        flushHistory()
     }
 
     private fun addFinalMessage(msg: ConversationMessage) {
-        _state.update { st -> st.copy(transcript = (st.transcript + msg).takeLast(if (st.mode == ClientMode.HISTORY) Int.MAX_VALUE else MAX_MSGS)) }
-        flushHistory()
+        _state.update { st -> st.copy(transcript = (st.transcript + msg).takeLast(MAX_MSGS)) }
     }
 
     // ───────────────────────── Микрофон ─────────────────────────
@@ -536,11 +546,16 @@ class SessionManager @Inject constructor(
                 return@launch
             }
             _state.update { it.copy(isMicActive = true) }
+            var wasAiPlaying = false
             audioEngine.micOutput.collect { chunk ->
                 val isAiPlaying = System.currentTimeMillis() <= audioEngine.playbackAudibleUntilMs + 400L
-                
-                // ИЗМЕНЕНО: Учитываем флаг bargeInEnabled
-                if (bargeInEnabled || !isAiPlaying) {
+                if (!bargeInEnabled && isAiPlaying) {
+                    if (!wasAiPlaying) {
+                        liveClient.sendAudioStreamEnd()
+                        wasAiPlaying = true
+                    }
+                } else {
+                    wasAiPlaying = false
                     liveClient.sendAudio(chunk)
                     if (!_state.value.isAiSpeaking) pushLevel(visLevel(rms(chunk)))
                 }
@@ -628,29 +643,24 @@ class SessionManager @Inject constructor(
         runCatching { context.startService(GeminiLiveForegroundService.stopIntent(context)) }
     }
 
-    private fun seedHistoryIfNeeded() {
+    private suspend fun seedHistoryIfNeeded() {
         if (_state.value.mode != ClientMode.HISTORY) return
-        appScope.launch {
-            val history = historyDao.getAll().map { 
-                ConversationMessage(it.role, it.text) 
-            }
-            if (history.isNotEmpty()) {
-                liveClient.restoreContext(history)
-            }
+        val history = historyDao.getAll().map { 
+            ConversationMessage(it.role, it.text) 
+        }
+        if (history.isNotEmpty()) {
+            liveClient.restoreContext(history)
         }
     }
 
     private fun flushHistory() {
+        // Вызывается ТОЛЬКО из GeminiEvent.TurnComplete
         if (_state.value.mode != ClientMode.HISTORY) return
         appScope.launch {
-            historyDao.clear()
-            _state.value.transcript.forEach { msg ->
-                historyDao.insert(com.learnde.app.history.HistoryMessage(
-                    role = msg.role,
-                    text = msg.text,
-                    timestamp = msg.timestamp
-                ))
+            val msgs = _state.value.transcript.map { 
+                com.learnde.app.history.HistoryMessage(role = it.role, text = it.text, timestamp = it.timestamp) 
             }
+            historyDao.replaceHistory(msgs)
         }
     }
 }

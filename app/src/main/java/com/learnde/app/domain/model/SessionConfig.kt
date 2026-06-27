@@ -66,7 +66,6 @@ data class SessionConfig(
 }
 
 enum class LatencyProfile(val thinkingLevel: String?, val displayName: String) {
-    Off      (null,      "Off — мгновенный ответ"),
     UltraLow ("minimal", "Ultra Low — minimal thinking"),
     Low      ("low",     "Low — light thinking"),
     Balanced ("medium",  "Balanced — medium thinking"),

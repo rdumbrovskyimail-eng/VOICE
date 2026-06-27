@@ -76,7 +76,6 @@ fun ClientScreen(
     viewModel: ClientViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
-    val amplitude by viewModel.amplitude.collectAsStateWithLifecycle()
     val chatPrefs by viewModel.chatPrefs.collectAsStateWithLifecycle()
     val historyMessages by viewModel.historyMessages.collectAsStateWithLifecycle()
     val historyInfo by viewModel.historyInfo.collectAsStateWithLifecycle()
@@ -236,7 +235,7 @@ fun ClientScreen(
                     contentAlignment = Alignment.BottomCenter
                 ) {
                     GeminiWaves(
-                        amplitude = amplitude,
+                        amplitudeProvider = { viewModel.amplitude.value },
                         isActive = state.isConnected || state.isConnecting,
                         modifier = Modifier.fillMaxSize()
                     )

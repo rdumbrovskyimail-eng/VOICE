@@ -67,6 +67,8 @@ class GeminiLiveClient(
 
     private val internalScope = CoroutineScope(SupervisorJob() + Dispatchers.IO + kotlinx.coroutines.CoroutineExceptionHandler { _, e -> logger.e("liveClient scope uncaught: ${e.message}", e) })
 
+    private val wsMutex = kotlinx.coroutines.sync.Mutex()
+
     @Volatile private var webSocket: WebSocket? = null
 
     private val _events = MutableSharedFlow<GeminiEvent>(
@@ -108,7 +110,7 @@ class GeminiLiveClient(
         }
     }
 
-    override suspend fun connect(apiKey: String, config: SessionConfig, logRaw: Boolean) {
+    override suspend fun connect(apiKey: String, config: SessionConfig, logRaw: Boolean) = wsMutex.withLock {
         if (webSocket != null) disconnect()
 
         currentConfig = config
@@ -232,12 +234,12 @@ class GeminiLiveClient(
         setupWatchdog = null
     }
 
-    override suspend fun disconnect() {
+    override suspend fun disconnect() = wsMutex.withLock {
         cancelSetupWatchdog()
         val ws = webSocket
         if (ws == null) {
             isReady = false
-            return
+            return@withLock
         }
         val completion = closeCompletion
         runCatching { ws.close(1000, "bye") }
@@ -300,13 +302,10 @@ class GeminiLiveClient(
                     if (config.mediaResolution.isNotBlank()) {
                         put("mediaResolution", config.mediaResolution)
                     }
-                    if (config.inputTranscription) {
-                        put("inputAudioTranscription", buildJsonObject {})
-                    }
-                    if (config.outputTranscription) {
-                        put("outputAudioTranscription", buildJsonObject {})
-                    }
                 })
+
+                if (config.inputTranscription) put("inputAudioTranscription", buildJsonObject {})
+                if (config.outputTranscription) put("outputAudioTranscription", buildJsonObject {})
 
                 if (config.systemInstruction.isNotBlank()) {
                     put("systemInstruction", buildJsonObject {
@@ -322,12 +321,12 @@ class GeminiLiveClient(
                     put("tools", buildJsonArray {
                         if (config.enableGoogleSearch) {
                             add(buildJsonObject {
-                                put("googleSearch", buildJsonObject {})
+                                put("google_search", buildJsonObject {})
                             })
                         }
                         if (config.functionDeclarations.isNotEmpty()) {
                             add(buildJsonObject {
-                                put("functionDeclarations", buildJsonArray {
+                                put("function_declarations", buildJsonArray {
                                     for (decl in config.functionDeclarations) {
                                         add(buildFunctionDeclaration(decl))
                                     }
@@ -443,27 +442,6 @@ class GeminiLiveClient(
         webSocket?.send(raw)
     }
 
-    override fun sendText(text: String) {
-        if (!isReady) return
-        val msg = buildJsonObject {
-            put("clientContent", buildJsonObject {
-                put("turns", buildJsonArray {
-                    add(buildJsonObject {
-                        put("role", "user")
-                        put("parts", buildJsonArray {
-                            add(buildJsonObject { put("text", text) })
-                        })
-                    })
-                })
-                put("turnComplete", true)
-            })
-        }
-        val raw = msg.toString()
-        logger.d("TEXT → (${text.length} chars, clientContent)")
-        trackSentFrame(raw)
-        webSocket?.send(raw)
-    }
-
     override fun sendRealtimeText(text: String) {
         if (!isReady) return
         val raw = buildJsonObject {
@@ -479,13 +457,25 @@ class GeminiLiveClient(
     override fun sendClientTurn(text: String, jpegImages: List<ByteArray>, turnComplete: Boolean) {
         if (!isReady) return
 
-        // В 3.1 mid-session картинки шлются как видеокадры, а текст через realtimeInput
+        val msg = buildJsonObject {
+            put("clientContent", buildJsonObject {
+                put("turns", buildJsonArray {
+                    add(buildJsonObject {
+                        put("role", "user")
+                        put("parts", buildJsonArray {
+                            add(buildJsonObject { put("text", text) })
+                        })
+                    })
+                })
+                put("turnComplete", turnComplete)
+            })
+        }
+        val raw = msg.toString()
+        trackSentFrame(raw)
+        webSocket?.send(raw)
+
         for (img in jpegImages) {
             sendVideoFrame(img)
-        }
-
-        if (text.isNotBlank()) {
-            sendRealtimeText(text)
         }
     }
 

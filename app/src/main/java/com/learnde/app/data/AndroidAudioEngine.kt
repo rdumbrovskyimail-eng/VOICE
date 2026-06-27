@@ -212,7 +212,7 @@ class AndroidAudioEngine @Inject constructor(
             try {
                 val shortBuffer = byteBuffer.asShortBuffer()
                 while (isActive && isCapturing) {
-                    val read = recorder.read(buffer, 0, buffer.size)
+                    val read = kotlinx.coroutines.runInterruptible { recorder.read(buffer, 0, buffer.size) }
                     when {
                         read > 0 -> {
                             for (i in 0 until read) {
@@ -410,6 +410,7 @@ class AndroidAudioEngine @Inject constructor(
             withTimeoutOrNull(800L) { playbackJob?.cancelAndJoin() }
         }
         playbackJob = null
+        kotlinx.coroutines.withTimeoutOrNull(800L) { playbackJob?.cancelAndJoin() }
         synchronized(trackLock) {
             audioTrack?.let {
                 runCatching { it.pause(); it.flush(); it.stop(); it.release() }
