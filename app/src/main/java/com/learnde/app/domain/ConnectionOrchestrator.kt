@@ -115,16 +115,35 @@ class ConnectionOrchestrator @Inject constructor(
                 scope?.launch { rotate(reason = "goAway") }
             }
 
-            is GeminiEvent.ConnectionError -> {
-                scope?.launch { recover(reason = event.message) }
-            }
+            // Текст ошибки уже показывает SessionManager. Решение recover/fail-fast
+            // принимаем по коду закрытия (он приходит в Disconnected) — не дублируем recover.
+            is GeminiEvent.ConnectionError -> Unit
 
             is GeminiEvent.Disconnected -> {
-                scope?.launch { recover(reason = "ws closed ${event.code}") }
+                if (isFatalClose(event.code)) {
+                    val why = event.reason.ifBlank { "код ${event.code}" }
+                    scope?.launch {
+                        failFast("Подключение отклонено сервером ($why). Автоповтор отключён — исправьте setup/ключ/модель.")
+                    }
+                } else {
+                    scope?.launch { recover(reason = "ws closed ${event.code}") }
+                }
             }
 
             else -> Unit
         }
+    }
+
+    private fun isFatalClose(code: Int): Boolean =
+        code == 1007 || code == 1008 || code == 4001 || code == 4003 || code == 403
+
+    private suspend fun failFast(message: String) {
+        stuckJob?.cancel(); stuckJob = null
+        opMutex.withLock {
+            runCatching { liveClient.disconnect() }
+            transition(LinkState.FAILED, "fatal")
+        }
+        onPermanentFailure?.invoke(message)
     }
 
     fun onUserTurnEnded() {
