@@ -120,6 +120,12 @@ fun SettingsScreen(
                     checked = settings.enableGoogleSearch,
                     onCheckedChange = viewModel::updateGoogleSearch
                 )
+                SettingsSwitch(
+                    label = "Перебивание (полный дуплекс)",
+                    description = "Можно перебивать ассистента голосом. Требует аппаратного эхоподавления; на части устройств возможно самоперебивание.",
+                    checked = settings.bargeInEnabled,
+                    onCheckedChange = viewModel::updateBargeIn
+                )
             }
 
             // --- СЕКЦИЯ 4: СЕССИЯ И VAD ---
