@@ -94,7 +94,7 @@ data class AppSettings(
     val outputTranscription: Boolean = true,
 
     // ─────────── Инструменты / мышление ───────────
-    val enableGoogleSearch: Boolean = false,
+    val enableGoogleSearch: Boolean = true,
     val latencyProfile: String = "Low",   // light thinking — баланс точность/скорость.
     val thinkingIncludeThoughts: Boolean = false,
     val mediaResolution: String = "",      // для видео (на будущее), пусто = по умолчанию.
@@ -103,6 +103,7 @@ data class AppSettings(
     val systemInstruction: String = DEFAULT_SYSTEM_INSTRUCTION,
 
     // ─────────── UI / тема / чат ───────────
+    val onboardingDone: Boolean = false,
     val themeMode: ThemeMode = ThemeMode.AUTO,
     val chatFontScale: Float = 1.0f,
     val chatShowTimestamps: Boolean = false,

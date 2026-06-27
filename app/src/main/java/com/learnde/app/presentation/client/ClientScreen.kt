@@ -140,6 +140,9 @@ fun ClientScreen(
                             showPromptSuccess = false
                         }
                     },
+                    attachments = promptAttachments,
+                    onAttach = { promptPicker.launch(arrayOf("*/*")) },
+                    onRemoveAttachment = { promptAttachments = promptAttachments - it },
                 )
                 
                 AnimatedVisibility(
@@ -252,25 +255,48 @@ private fun Header(state: SessionManager.State, onToggleConnection: () -> Unit, 
     }
 }
 
-@Composable
-private fun PromptZone(value: String, onValueChange: (String) -> Unit, onApply: () -> Unit) {
-    Row(Modifier.fillMaxWidth().height(56.dp), verticalAlignment = Alignment.CenterVertically) {
-        OutlinedTextField(
-            value = value,
-            onValueChange = onValueChange,
-            modifier = Modifier.weight(1f).fillMaxHeight(),
-            placeholder = { Text("Системный промпт сессии…", color = TextDim, fontSize = 13.sp) },
-            textStyle = androidx.compose.ui.text.TextStyle(color = Color.White, fontSize = 14.sp),
-            shape = RoundedCornerShape(12.dp),
-            colors = darkFieldColors(),
-        )
-        Spacer(Modifier.width(8.dp))
-        IconButton(
-            onClick = onApply,
-            modifier = Modifier.size(56.dp).clip(RoundedCornerShape(12.dp)).background(AccentBlue),
-        ) {
-            Icon(Icons.Filled.Check, contentDescription = "Применить промпт", tint = Color.White)
+private fun PromptZone(
+    value: String,
+    onValueChange: (String) -> Unit,
+    onApply: () -> Unit,
+    attachments: List<Uri>,
+    onAttach: () -> Unit,
+    onRemoveAttachment: (Uri) -> Unit,
+) {
+    Column(Modifier.fillMaxWidth()) {
+        Row(Modifier.fillMaxWidth().height(56.dp), verticalAlignment = Alignment.CenterVertically) {
+            OutlinedTextField(
+                value = value,
+                onValueChange = onValueChange,
+                modifier = Modifier.weight(1f).fillMaxHeight(),
+                placeholder = { Text("Системный промпт сессии…", color = TextDim, fontSize = 13.sp) },
+                textStyle = androidx.compose.ui.text.TextStyle(color = Color.White, fontSize = 14.sp),
+                shape = RoundedCornerShape(12.dp),
+                colors = darkFieldColors(),
+            )
+            Spacer(Modifier.width(8.dp))
+            Box {
+                IconButton(
+                    onClick = onAttach,
+                    modifier = Modifier.size(56.dp).clip(RoundedCornerShape(12.dp)).background(SurfaceCtrl),
+                ) { Icon(Icons.Filled.AttachFile, contentDescription = "Прикрепить к промпту", tint = TextDim) }
+                if (attachments.isNotEmpty()) {
+                    Box(
+                        Modifier.align(Alignment.TopEnd).padding(3.dp).size(18.dp)
+                            .clip(CircleShape).background(AccentBlue),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text("${attachments.size}", color = Color.White, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                    }
+                }
+            }
+            Spacer(Modifier.width(8.dp))
+            IconButton(
+                onClick = onApply,
+                modifier = Modifier.size(56.dp).clip(RoundedCornerShape(12.dp)).background(AccentBlue),
+            ) { Icon(Icons.Filled.Check, contentDescription = "Применить промпт", tint = Color.White) }
         }
+        if (attachments.isNotEmpty()) AttachmentChips(attachments, onRemoveAttachment)
     }
 }
 

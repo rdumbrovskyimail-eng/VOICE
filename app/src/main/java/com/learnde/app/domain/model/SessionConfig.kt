@@ -50,7 +50,7 @@ data class SessionConfig(
     // Рабочие дефолты сжатия (раньше были 0 → конфиг не эмитился).
     val compressionTriggerTokens: Long = 25_600L,
     val compressionTargetTokens: Long = 8_192L,
-    val enableGoogleSearch: Boolean = false,
+    val enableGoogleSearch: Boolean = true,
     val functionDeclarations: List<FunctionDeclarationConfig> = emptyList(),
     val sendAudioStreamEnd: Boolean = true,
     val setupTimeoutMs: Long = 10_000L

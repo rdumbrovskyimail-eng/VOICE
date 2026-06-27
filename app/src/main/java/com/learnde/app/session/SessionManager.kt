@@ -70,6 +70,8 @@ class SessionManager @Inject constructor(
     )
 
     companion object {
+        // Скрытая метка: всё, что начинается с неё, пользователь НАПЕЧАТАЛ (как SMS).
+        const val TYPED_PREFIX = "[Пользователь написал это текстом ⌨]"
         private const val MAX_MSGS = 80
         private const val AMP_DECAY = 0.82f       // плавное затухание орба
         private const val AMP_TICK_MS = 60L
@@ -127,8 +129,8 @@ class SessionManager @Inject constructor(
         streamingRole = null
         appScope.launch {
             if (attachments.isEmpty()) {
-                addFinalMessage(ConversationMessage.user(t))
-                liveClient.sendRealtimeText(t)
+                addFinalMessage(ConversationMessage.user(t))           // в чате — чистый текст
+                liveClient.sendRealtimeText("$TYPED_PREFIX $t")        // модель видит метку
                 orchestrator.onUserTurnEnded()
                 return@launch
             }
@@ -138,9 +140,10 @@ class SessionManager @Inject constructor(
                 return@launch
             }
             val composed = buildString {
+                append(TYPED_PREFIX).append(" ")
                 if (t.isNotEmpty()) append(t)
-                if (r.extractedText.isNotEmpty()) { if (isNotEmpty()) append("\n"); append(r.extractedText) }
-                if (isEmpty()) append("Посмотри на прикреплённые файлы и помоги.")
+                if (r.extractedText.isNotEmpty()) { append("\n"); append(r.extractedText) }
+                if (length <= TYPED_PREFIX.length + 1) append("Посмотри на прикреплённые файлы и помоги.")
             }
             liveClient.sendClientTurn(composed, r.images, turnComplete = true)
             addFinalMessage(
@@ -325,10 +328,11 @@ class SessionManager @Inject constructor(
     }
 
     private fun buildSystemInstruction(base: String, prompt: String): String {
+        val modalityHint = "\n\nКАНАЛ ВВОДА: реплики, начинающиеся с «$TYPED_PREFIX», пользователь НАПЕЧАТАЛ вручную (как SMS); всё остальное он произнёс ГОЛОСОМ. Никогда не произноси и не повторяй сам тег «$TYPED_PREFIX» — это служебная пометка. На печатный ввод уместно отвечать чуть короче."
         val dashboardHint = "\n\nУ тебя есть доступ к экрану пользователя. Если ты объясняешь сложное понятие, переводишь фразу, диктуешь номер или формулу — ОБЯЗАТЕЛЬНО вызывай функцию update_dashboard, чтобы вывести этот текст на экран для наглядности."
-        
-        return if (prompt.isBlank()) base + dashboardHint
-        else base + dashboardHint + "\n\n[Промпт для текущей сессии]:\n" + prompt
+
+        return if (prompt.isBlank()) base + modalityHint + dashboardHint
+        else base + modalityHint + dashboardHint + "\n\n[Промпт для текущей сессии]:\n" + prompt
     }
 
     // ───────────────────────── События / orchestrator ─────────────────────────

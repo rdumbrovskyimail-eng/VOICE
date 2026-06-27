@@ -31,6 +31,7 @@ fun SettingsScreen(
     viewModel: SettingsViewModel = hiltViewModel()
 ) {
     val settings by viewModel.settings.collectAsStateWithLifecycle()
+    val uriHandler = LocalUriHandler.current
 
     Scaffold(
         topBar = {
@@ -62,6 +63,9 @@ fun SettingsScreen(
                     onValueChange = viewModel::updateApiKey,
                     placeholder = "AIzaSy..."
                 )
+                TextButton(onClick = { uriHandler.openUri("https://aistudio.google.com/apikey") }) {
+                    Text("🔑 Получить бесплатный ключ в Google AI Studio →", color = AccentBlue, fontSize = 13.sp)
+                }
                 SettingsTextField(
                     label = "Модель",
                     value = settings.model,
@@ -73,13 +77,7 @@ fun SettingsScreen(
 
             // --- СЕКЦИЯ 2: ГОЛОС И АУДИО ---
             SettingsSection("Голос и Аудио") {
-                SettingsTextField(
-                    label = "Голос ассистента (Chirp 3 HD)",
-                    value = settings.voiceId,
-                    onValueChange = viewModel::updateVoice,
-                    placeholder = "Sulafat",
-                    hint = "Sulafat (тёплый), Puck (бодрый), Aoede (спокойный), Fenrir (энергичный)"
-                )
+                VoicePickerField(selectedId = settings.voiceId, onSelect = viewModel::updateVoice)
                 SettingsSlider(
                     label = "Громкость ИИ: ${settings.playbackVolume}%",
                     value = settings.playbackVolume.toFloat(),
@@ -109,13 +107,7 @@ fun SettingsScreen(
                     onValueChange = viewModel::updateTemperature,
                     valueRange = 0f..2f
                 )
-                SettingsTextField(
-                    label = "Уровень мышления (Thinking Level)",
-                    value = settings.latencyProfile,
-                    onValueChange = viewModel::updateLatencyProfile,
-                    placeholder = "Low",
-                    hint = "Доступно: Off, UltraLow, Low, Balanced, Reasoning. (Влияет на задержку)"
-                )
+                ThinkingPickerField(selectedName = settings.latencyProfile, onSelect = viewModel::updateLatencyProfile)
                 SettingsSwitch(
                     label = "Google Search Grounding",
                     description = "Позволяет ИИ искать актуальную информацию в интернете.",
@@ -217,4 +209,98 @@ private fun SettingsSwitch(label: String, description: String, checked: Boolean,
             colors = SwitchDefaults.colors(checkedThumbColor = Color.White, checkedTrackColor = AccentBlue, uncheckedTrackColor = Color.DarkGray)
         )
     }
+}
+
+@Composable
+private fun VoicePickerField(selectedId: String, onSelect: (String) -> Unit) {
+    var expanded by remember { mutableStateOf(false) }
+    val current = VoiceCatalog.byId(selectedId) ?: VoiceCatalog.all.first()
+    Column {
+        Text("Голос ассистента", color = Color.White, fontSize = 14.sp, modifier = Modifier.padding(bottom = 6.dp))
+        Box {
+            Row(
+                Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)).background(BgColor)
+                    .border(1.dp, Color(0x33FFFFFF), RoundedCornerShape(8.dp))
+                    .clickable { expanded = true }.padding(14.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(Modifier.weight(1f)) {
+                    Text("${current.id} · ${current.trait}", color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.Medium)
+                    Text(current.description, color = TextDim, fontSize = 12.sp, maxLines = 2, lineHeight = 15.sp)
+                }
+                Icon(Icons.Filled.ArrowDropDown, null, tint = TextDim)
+            }
+            DropdownMenu(
+                expanded = expanded, onDismissRequest = { expanded = false },
+                modifier = Modifier.background(SurfaceColor).heightIn(max = 460.dp)
+            ) {
+                VoiceCatalog.all.forEach { v ->
+                    DropdownMenuItem(
+                        text = {
+                            Column(Modifier.padding(vertical = 2.dp).widthIn(max = 320.dp)) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Text(v.id, color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
+                                    Spacer(Modifier.width(8.dp)); Text(v.trait, color = AccentBlue, fontSize = 12.sp)
+                                    if (v.id in VoiceCatalog.recommended) {
+                                        Spacer(Modifier.width(6.dp)); Text("★", color = Color(0xFFFFC107), fontSize = 13.sp)
+                                    }
+                                }
+                                Text(v.description, color = TextDim, fontSize = 12.sp, lineHeight = 15.sp)
+                            }
+                        },
+                        onClick = { onSelect(v.id); expanded = false }
+                    )
+                }
+            }
+        }
+        Text("★ — рекомендуемые. Послушать все голоса можно в Google AI Studio.", color = TextDim, fontSize = 11.sp, modifier = Modifier.padding(top = 4.dp))
+    }
+}
+
+@Composable
+private fun ThinkingPickerField(selectedName: String, onSelect: (String) -> Unit) {
+    var expanded by remember { mutableStateOf(false) }
+    val profiles = LatencyProfile.values().toList()
+    val current = profiles.firstOrNull { it.name == selectedName } ?: LatencyProfile.Low
+    Column {
+        Text("Уровень мышления (Thinking)", color = Color.White, fontSize = 14.sp, modifier = Modifier.padding(bottom = 6.dp))
+        Box {
+            Row(
+                Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)).background(BgColor)
+                    .border(1.dp, Color(0x33FFFFFF), RoundedCornerShape(8.dp))
+                    .clickable { expanded = true }.padding(14.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(Modifier.weight(1f)) {
+                    Text(current.displayName, color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.Medium)
+                    Text(thinkingHint(current), color = TextDim, fontSize = 12.sp, lineHeight = 15.sp)
+                }
+                Icon(Icons.Filled.ArrowDropDown, null, tint = TextDim)
+            }
+            DropdownMenu(
+                expanded = expanded, onDismissRequest = { expanded = false },
+                modifier = Modifier.background(SurfaceColor)
+            ) {
+                profiles.forEach { p ->
+                    DropdownMenuItem(
+                        text = {
+                            Column(Modifier.padding(vertical = 2.dp).widthIn(max = 300.dp)) {
+                                Text(p.displayName, color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
+                                Text(thinkingHint(p), color = TextDim, fontSize = 12.sp, lineHeight = 15.sp)
+                            }
+                        },
+                        onClick = { onSelect(p.name); expanded = false }
+                    )
+                }
+            }
+        }
+    }
+}
+
+private fun thinkingHint(p: LatencyProfile): String = when (p) {
+    LatencyProfile.Off       -> "Без размышления. Самый быстрый ответ, минимум задержки."
+    LatencyProfile.UltraLow  -> "Почти без размышления. Очень быстро, для простых реплик."
+    LatencyProfile.Low       -> "Лёгкое размышление. Баланс скорости и качества (по умолчанию)."
+    LatencyProfile.Balanced  -> "Среднее размышление. Точнее на сложных вопросах, чуть медленнее."
+    LatencyProfile.Reasoning -> "Глубокое размышление. Лучшее качество рассуждений, выше задержка."
 }
