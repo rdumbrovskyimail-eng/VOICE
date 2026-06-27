@@ -17,7 +17,12 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.material.icons.filled.AttachFile
+import androidx.compose.material.icons.filled.DeleteOutline
+import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.InsertDriveFile
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.TextButton
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -69,6 +74,9 @@ fun ClientScreen(
     val state by viewModel.state.collectAsStateWithLifecycle()
     val amplitude by viewModel.amplitude.collectAsStateWithLifecycle()
     val chatPrefs by viewModel.chatPrefs.collectAsStateWithLifecycle()
+    val historyMessages by viewModel.historyMessages.collectAsStateWithLifecycle()
+    val historyInfo by viewModel.historyInfo.collectAsStateWithLifecycle()
+    val isHistory = state.mode == ClientMode.HISTORY
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
 
@@ -123,12 +131,19 @@ fun ClientScreen(
             Header(
                 state = state,
                 onToggleConnection = { onToggleConnection() },
+                onToggleHistory = { viewModel.toggleHistoryMode() },
                 onSettings = { navController.navigate(Routes.SETTINGS) },
                 modifier = Modifier.padding(horizontal = 14.dp)
             )
 
-            // 2. PROMPT ZONE & SUCCESS MESSAGE
-            Column(modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp)) {
+            // 2. PROMPT ZONE (скрыт в History) / HISTORY CONTROLS
+            if (isHistory) HistoryControls(
+                info = historyInfo,
+                onApplyPrompt = { viewModel.applyHistoryPrompt(it) },
+                onClear = { viewModel.clearHistory() },
+                modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp),
+            )
+            if (!isHistory) Column(modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp)) {
                 PromptZone(
                     value = promptText,
                     onValueChange = { promptText = it },
@@ -183,7 +198,7 @@ fun ClientScreen(
             // 4. CHAT AREA (занимает оставшееся место)
             Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
                 ChatList(
-                    messages = state.transcript,
+                    messages = if (isHistory) historyMessages else state.transcript,
                     prefs = chatPrefs,
                     modifier = Modifier.fillMaxSize().padding(horizontal = 14.dp)
                 )
@@ -225,7 +240,7 @@ fun ClientScreen(
 }
 
 @Composable
-private fun Header(state: SessionManager.State, onToggleConnection: () -> Unit, onSettings: () -> Unit, modifier: Modifier = Modifier) {
+private fun Header(state: SessionManager.State, onToggleConnection: () -> Unit, onToggleHistory: () -> Unit, onSettings: () -> Unit, modifier: Modifier = Modifier) {
     val dotColor = when {
         state.isConnected -> Color(0xFF66BB6A)
         state.isConnecting -> Color(0xFFFFC107)
@@ -248,6 +263,14 @@ private fun Header(state: SessionManager.State, onToggleConnection: () -> Unit, 
                 if (state.isConnected || state.isConnecting) Icons.Filled.Stop else Icons.Filled.PlayArrow,
                 contentDescription = "Подключить/Отключить",
                 tint = if (state.isConnected || state.isConnecting) Color(0xFFEF5350) else AccentBlue,
+            )
+        }
+        val historyOn = state.mode == ClientMode.HISTORY
+        IconButton(onClick = onToggleHistory) {
+            Icon(
+                Icons.Filled.History,
+                contentDescription = "Режим истории",
+                tint = if (historyOn) AccentBlue else TextDim,
             )
         }
         IconButton(onClick = onSettings) {
@@ -287,9 +310,7 @@ private fun PromptZone(
                         Modifier.align(Alignment.TopEnd).padding(3.dp).size(18.dp)
                             .clip(CircleShape).background(AccentBlue),
                         contentAlignment = Alignment.Center
-                    ) {
-                        Text("${attachments.size}", color = Color.White, fontSize = 10.sp, fontWeight = FontWeight.Bold)
-                    }
+                    ) { Text("${attachments.size}", color = Color.White, fontSize = 10.sp, fontWeight = FontWeight.Bold) }
                 }
             }
             Spacer(Modifier.width(8.dp))
@@ -306,22 +327,21 @@ private fun PromptZone(
 private fun ChatList(messages: List<ConversationMessage>, prefs: ChatPrefs, modifier: Modifier = Modifier) {
     val listState = rememberLazyListState()
     val timeFormatter = remember { SimpleDateFormat("HH:mm", Locale.getDefault()) }
-    // "Прилипать" к низу. Флаг меняется ТОЛЬКО когда пользователь сам докрутил и отпустил,
-    // поэтому дописывание токенов в реплику не сбивает его (нет гонки состояний).
+
     var stickToBottom by remember { mutableStateOf(true) }
     LaunchedEffect(listState) {
         snapshotFlow { listState.isScrollInProgress }.collect { scrolling ->
             if (!scrolling) stickToBottom = !listState.canScrollForward
         }
     }
-    // Срабатывает и при НОВОМ сообщении (size), и при ДОПИСЫВАНИИ в последнее (lastText) —
-    // именно это чинит "чат не подъезжает, когда говорит Gemini / когда говорю я".
+
     val lastText = messages.lastOrNull()?.text
     LaunchedEffect(messages.size, lastText, prefs.autoScroll) {
         if (prefs.autoScroll && stickToBottom && messages.isNotEmpty()) {
-            listState.scrollToItem(messages.lastIndex, Int.MAX_VALUE) // к самому низу последней реплики
+            listState.scrollToItem(messages.lastIndex, Int.MAX_VALUE)
         }
     }
+
     LazyColumn(
         modifier = modifier,
         state = listState,
@@ -507,4 +527,70 @@ private fun fileExt(ctx: android.content.Context, uri: Uri): String {
         }
     }.getOrNull() ?: uri.lastPathSegment ?: ""
     return name.substringAfterLast('.', "").uppercase().take(4)
+}
+
+@Composable
+private fun HistoryControls(
+    info: HistoryInfo,
+    onApplyPrompt: (String) -> Unit,
+    onClear: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    var draft by remember { mutableStateOf("") }
+    var confirmClear by remember { mutableStateOf(false) }
+
+    Column(modifier.fillMaxWidth()) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Icon(Icons.Filled.History, null, tint = AccentBlue, modifier = Modifier.size(16.dp))
+            Spacer(Modifier.width(6.dp))
+            Text("Режим истории — диалоги сохраняются", color = AccentBlue, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+        }
+        Spacer(Modifier.height(8.dp))
+
+        if (!info.locked) {
+            Row(Modifier.fillMaxWidth().height(56.dp), verticalAlignment = Alignment.CenterVertically) {
+                OutlinedTextField(
+                    value = draft,
+                    onValueChange = { draft = it },
+                    modifier = Modifier.weight(1f).fillMaxHeight(),
+                    placeholder = { Text("Постоянный промпт истории…", color = TextDim, fontSize = 13.sp) },
+                    textStyle = androidx.compose.ui.text.TextStyle(color = Color.White, fontSize = 14.sp),
+                    shape = RoundedCornerShape(12.dp),
+                    colors = darkFieldColors(),
+                )
+                Spacer(Modifier.width(8.dp))
+                IconButton(
+                    onClick = { if (draft.isNotBlank()) onApplyPrompt(draft) },
+                    modifier = Modifier.size(56.dp).clip(RoundedCornerShape(12.dp)).background(AccentBlue),
+                ) { Icon(Icons.Filled.Check, "Зафиксировать промпт", tint = Color.White) }
+            }
+        } else {
+            Box(
+                Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(Color(0xFF1E2229)).padding(12.dp)
+            ) {
+                Text(
+                    if (info.prompt.isBlank()) "Промпт не задан" else info.prompt,
+                    color = Color.White, fontSize = 13.sp,
+                )
+            }
+            Spacer(Modifier.height(8.dp))
+            OutlinedButton(onClick = { confirmClear = true }, modifier = Modifier.fillMaxWidth()) {
+                Icon(Icons.Filled.DeleteOutline, null, tint = Color(0xFFEF5350), modifier = Modifier.size(18.dp))
+                Spacer(Modifier.width(6.dp))
+                Text("Очистить историю и сменить промпт", color = Color(0xFFEF5350), fontSize = 13.sp)
+            }
+        }
+    }
+
+    if (confirmClear) {
+        AlertDialog(
+            onDismissRequest = { confirmClear = false },
+            title = { Text("Очистить историю?") },
+            text = { Text("Вся сохранённая история будет удалена без возможности восстановления. После этого можно задать новый промпт.") },
+            confirmButton = {
+                TextButton(onClick = { confirmClear = false; onClear() }) { Text("Удалить", color = Color(0xFFEF5350)) }
+            },
+            dismissButton = { TextButton(onClick = { confirmClear = false }) { Text("Отмена") } },
+        )
+    }
 }
