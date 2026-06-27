@@ -53,6 +53,7 @@ data class SessionConfig(
     val enableGoogleSearch: Boolean = true,
     val functionDeclarations: List<FunctionDeclarationConfig> = emptyList(),
     val sendAudioStreamEnd: Boolean = true,
+    val seedHistoryInClientContent: Boolean = false,
     val setupTimeoutMs: Long = 10_000L
 ) {
     companion object {
