@@ -407,7 +407,6 @@ class SessionManager @Inject constructor(
             enableGoogleSearch = settings.enableGoogleSearch,
             functionDeclarations = listOf(dashboardFunction), // ИСПРАВЛЕНО: передаем список напрямую
             sendAudioStreamEnd = settings.sendAudioStreamEnd,
-            additionalParams = if (historyConfig.isNotEmpty()) mapOf("historyConfig" to historyConfig) else emptyMap(),
         )
     }
 
