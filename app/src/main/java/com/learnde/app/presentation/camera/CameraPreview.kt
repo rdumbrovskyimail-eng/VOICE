@@ -19,7 +19,6 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.FlashOff
 import androidx.compose.material.icons.filled.FlashOn
@@ -191,7 +190,6 @@ private fun CameraPreview(
                     .align(Alignment.TopEnd)
                     .padding(8.dp)
                     .size(40.dp)
-                    .clip(CircleShape)
                     .background(Color.Black.copy(alpha = 0.45f)),
             ) {
                 Icon(
