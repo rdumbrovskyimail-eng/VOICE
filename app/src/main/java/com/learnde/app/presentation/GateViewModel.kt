@@ -14,17 +14,12 @@ import kotlinx.coroutines.flow.stateIn
 import javax.inject.Inject
 
 /**
- * Решает, нужен ли онбординг при старте, и отдаёт выбранную тему.
- * needsOnboarding == null → ещё не знаем (не дёргаем навигацию до первой эмиссии).
+ * Отдаёт выбранную тему.
  */
 @HiltViewModel
 class GateViewModel @Inject constructor(
     store: DataStore<AppSettings>
 ) : ViewModel() {
-
-    val needsOnboarding: StateFlow<Boolean?> = store.data
-        .map { !it.onboardingDone }
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
 
     /** Тема приложения (AUTO/LIGHT/DARK) — оживляет настройку themeMode. */
     val themeMode: StateFlow<ThemeMode> = store.data
