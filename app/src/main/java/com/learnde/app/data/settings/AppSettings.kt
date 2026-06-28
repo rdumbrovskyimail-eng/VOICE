@@ -83,7 +83,7 @@ data class AppSettings(
     val outputTranscription: Boolean = true,
 
     // ─────────── Инструменты / мышление ───────────
-    val enableGoogleSearch: Boolean = true,
+    val enableGoogleSearch: Boolean = false,
     val latencyProfile: String = "Low",   // light thinking — баланс точность/скорость.
     val thinkingIncludeThoughts: Boolean = false,
     val mediaResolution: String = "",      // для видео (на будущее), пусто = по умолчанию.
