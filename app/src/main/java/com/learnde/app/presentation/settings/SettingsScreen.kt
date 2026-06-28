@@ -118,8 +118,7 @@ private fun SettingsTextField(label: String, value: String, onValueChange: (Stri
                 focusedBorderColor = pal.accentBlue, unfocusedBorderColor = Color.Transparent,
                 focusedContainerColor = pal.surface, unfocusedContainerColor = pal.surface,
                 cursorColor = pal.accentBlue
-            ),
-            contentPadding = PaddingValues(horizontal = Space.md, vertical = Space.md)
+            )
         )
     }
 }
