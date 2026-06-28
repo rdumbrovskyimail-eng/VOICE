@@ -90,18 +90,17 @@ fun ClientScreen(navController: NavController, viewModel: ClientViewModel = hilt
 
             // 3. ПРОМПТ
             Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp)) {
-                Row(Modifier.fillMaxWidth().height(40.dp), verticalAlignment = Alignment.CenterVertically) {
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                     OutlinedTextField(
-                        value = promptText, onValueChange = { promptText = it }, modifier = Modifier.weight(1f).fillMaxHeight(),
+                        value = promptText, onValueChange = { promptText = it }, modifier = Modifier.weight(1f),
                         placeholder = { Text("Системный промпт...", fontSize = 11.sp) }, textStyle = LocalTextStyle.current.copy(fontSize = 11.sp),
                         shape = RoundedCornerShape(8.dp), singleLine = true,
-                        colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = pal.outline, unfocusedBorderColor = pal.outline),
-                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 0.dp)
+                        colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = pal.outline, unfocusedBorderColor = pal.outline)
                     )
                     Spacer(Modifier.width(8.dp))
                     IconButton(
                         onClick = { viewModel.applyPrompt(promptText.trim()) },
-                        modifier = Modifier.size(40.dp).clip(RoundedCornerShape(8.dp)).background(pal.surfaceElevated).border(1.dp, pal.outline, RoundedCornerShape(8.dp)),
+                        modifier = Modifier.size(48.dp).clip(RoundedCornerShape(8.dp)).background(pal.surfaceElevated).border(1.dp, pal.outline, RoundedCornerShape(8.dp)),
                     ) { Icon(Icons.Filled.Check, "Применить", tint = pal.textPrimary, modifier = Modifier.size(18.dp)) }
                 }
             }
