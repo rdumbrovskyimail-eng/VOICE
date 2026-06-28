@@ -49,7 +49,7 @@ import java.io.ByteArrayOutputStream
 import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicLong
 
-private const val FRAME_INTERVAL_MS = 1000L
+private const val FRAME_INTERVAL_MS = 2500L
 private const val MAX_SIDE = 768
 private const val JPEG_QUALITY = 70
 
@@ -57,6 +57,7 @@ private const val JPEG_QUALITY = 70
 fun CameraLayer(
     active: Boolean,
     onFrame: (ByteArray) -> Unit,
+    front: Boolean = true,
     modifier: Modifier = Modifier,
 ) {
     if (!active) return
@@ -74,7 +75,7 @@ fun CameraLayer(
     LaunchedEffect(active) { if (!granted) launcher.launch(Manifest.permission.CAMERA) }
 
     if (granted) {
-        CameraPreview(onFrame = onFrame, modifier = modifier)
+        CameraPreview(onFrame = onFrame, front = front, modifier = modifier)
     } else {
         Box(modifier.background(Color.Black), contentAlignment = Alignment.Center) {
             Text("Нужен доступ к камере", color = Color.White)
@@ -85,6 +86,7 @@ fun CameraLayer(
 @Composable
 private fun CameraPreview(
     onFrame: (ByteArray) -> Unit,
+    front: Boolean = true,
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
@@ -100,7 +102,7 @@ private fun CameraPreview(
     var hasFlash by remember { mutableStateOf(false) }
     var torchOn by remember { mutableStateOf(false) }
 
-    DisposableEffect(lifecycleOwner) {
+    DisposableEffect(lifecycleOwner, front) {
         val providerFuture = ProcessCameraProvider.getInstance(context)
         var boundCamera: Camera? = null
         var torchObserver: Observer<Int>? = null
@@ -136,7 +138,7 @@ private fun CameraPreview(
                     provider.unbindAll()
                     provider.bindToLifecycle(
                         lifecycleOwner,
-                        CameraSelector.DEFAULT_BACK_CAMERA,
+                        if (front) CameraSelector.DEFAULT_FRONT_CAMERA else CameraSelector.DEFAULT_BACK_CAMERA,
                         preview,
                         analysis,
                     )
