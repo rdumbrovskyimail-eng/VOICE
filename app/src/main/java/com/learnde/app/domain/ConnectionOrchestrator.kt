@@ -120,7 +120,7 @@ class ConnectionOrchestrator @Inject constructor(
             is GeminiEvent.ConnectionError -> Unit
 
             is GeminiEvent.Disconnected -> {
-                if (isFatalClose(event.code)) {
+                if (isFatalClose(event.code, event.reason)) {
                     val why = event.reason.ifBlank { "код ${event.code}" }
                     scope?.launch {
                         failFast("Подключение отклонено сервером ($why). Автоповтор отключён — исправьте setup/ключ/модель.")
@@ -134,8 +134,13 @@ class ConnectionOrchestrator @Inject constructor(
         }
     }
 
-    private fun isFatalClose(code: Int): Boolean =
-        code == 1007 || code == 1008 || code == 4001 || code == 4003 || code == 403
+    private fun isFatalClose(code: Int, reason: String = ""): Boolean {
+        if (code == 1007 || code == 1008 || code == 4001 || code == 4003 || code == 403) return true
+        val r = reason.lowercase()
+        if (code == 1011 && ("quota" in r || "billing" in r || "exceeded" in r)) return true
+        if (code == 4002) return true
+        return false
+    }
 
     private suspend fun failFast(message: String) {
         stuckJob?.cancel(); stuckJob = null
