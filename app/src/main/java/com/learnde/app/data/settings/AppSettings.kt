@@ -90,10 +90,6 @@ data class AppSettings(
 
     // ─────────── Системная инструкция ───────────
     val systemInstruction: String = DEFAULT_SYSTEM_INSTRUCTION,
-    // Режим History: постоянный промпт + блокировка (меняется только через Clear).
-    val historyPrompt: String = "",
-    val historyPromptLocked: Boolean = false,
-
     // ─────────── UI / тема / чат ───────────
     val onboardingDone: Boolean = false,
     val themeMode: ThemeMode = ThemeMode.AUTO,
