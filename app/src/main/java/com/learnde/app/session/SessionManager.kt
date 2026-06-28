@@ -550,12 +550,14 @@ class SessionManager @Inject constructor(
     private fun startMic() {
         if (_state.value.isMicActive) return
         micJob = appScope.launch {
-            val started = runCatching { audioEngine.startCapture() }.isSuccess
-            if (!started || !audioEngine.isCapturing) {
-                logger.e("startCapture failed — mic not activated")
+            runCatching { audioEngine.startCapture() }
+            if (!audioEngine.isCapturing) { delay(250); runCatching { audioEngine.startCapture() } }
+            if (!audioEngine.isCapturing) {
+                _state.update { it.copy(error = "Не удалось включить микрофон. Закройте приложения, занимающие микрофон, и нажмите 🎤 снова.", isMicActive = false) }
                 return@launch
             }
-            _state.update { it.copy(isMicActive = true) }
+            _state.update { it.copy(isMicActive = true, error = null) }
+            audioEngine.resetPlaybackClock()
             var wasAiPlaying = false
             audioEngine.micOutput.collect { chunk ->
                 val isAiPlaying = System.currentTimeMillis() <= audioEngine.playbackAudibleUntilMs + 400L
