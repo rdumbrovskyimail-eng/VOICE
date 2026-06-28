@@ -96,6 +96,12 @@ class AndroidAudioEngine @Inject constructor(
     @Volatile private var audibleUntilMs: Long = 0L
     override val playbackAudibleUntilMs: Long get() = audibleUntilMs
 
+    override fun resetPlaybackClock() {
+        audibleUntilMs = 0L
+        estimatedPlaybackEndMs = 0L
+        isFirstBatch = true
+    }
+
     private fun newEngineScope(): CoroutineScope =
         CoroutineScope(SupervisorJob() + Dispatchers.IO + CoroutineExceptionHandler { _, e -> logger.e("engineScope uncaught: ${e.message}", e) })
 
