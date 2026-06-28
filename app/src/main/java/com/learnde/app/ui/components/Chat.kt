@@ -90,15 +90,14 @@ fun ChatInputBar(
         Spacer(Modifier.width(Space.sm))
         
         OutlinedTextField(
-            value = value, onValueChange = onValueChange, modifier = Modifier.weight(1f).height(40.dp),
+            value = value, onValueChange = onValueChange, modifier = Modifier.weight(1f),
             placeholder = { Text("Сообщение…", style = MaterialTheme.typography.bodyMedium, color = pal.textDim) },
             textStyle = MaterialTheme.typography.bodyLarge, shape = RoundedCornerShape(Radius.pill), singleLine = true,
             colors = OutlinedTextFieldDefaults.colors(
                 focusedTextColor = pal.textPrimary, unfocusedTextColor = pal.textPrimary,
                 cursorColor = pal.accent, focusedBorderColor = pal.outline, unfocusedBorderColor = pal.outline,
                 focusedContainerColor = pal.surface, unfocusedContainerColor = pal.surface,
-            ),
-            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 0.dp)
+            )
         )
         
         Spacer(Modifier.width(Space.sm))
