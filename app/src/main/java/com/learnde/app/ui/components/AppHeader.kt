@@ -34,10 +34,8 @@ fun AppHeader(
     presence: Presence,
     isLinkActive: Boolean,          // isConnected || isConnecting → показываем Stop
     camMode: Boolean,
-    historyMode: Boolean,
     onToggleConnection: () -> Unit,
     onToggleCam: () -> Unit,
-    onToggleHistory: () -> Unit,
     onSettings: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -63,7 +61,6 @@ fun AppHeader(
         }
 
         ToolbarIcon(Icons.Filled.Videocam, "Камера", active = camMode, onClick = onToggleCam)
-        ToolbarIcon(Icons.Filled.History, "История", active = historyMode, onClick = onToggleHistory)
         ToolbarIcon(Icons.Filled.Settings, "Настройки", active = false, onClick = onSettings)
     }
 }
