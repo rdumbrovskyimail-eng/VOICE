@@ -91,7 +91,6 @@ data class AppSettings(
     // ─────────── Системная инструкция ───────────
     val systemInstruction: String = DEFAULT_SYSTEM_INSTRUCTION,
     // ─────────── UI / тема / чат ───────────
-    val onboardingDone: Boolean = false,
     val themeMode: ThemeMode = ThemeMode.AUTO,
     val chatFontScale: Float = 1.0f,
     val chatShowTimestamps: Boolean = false,
