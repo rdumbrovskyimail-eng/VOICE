@@ -16,38 +16,40 @@ import androidx.compose.ui.unit.sp
 @Immutable
 data class Palette(
     val background: Color = Color(0xFFFFFFFF),
-    val surface: Color = Color(0xFFFFFFFF),
-    val surfaceElevated: Color = Color(0xFFF5F5F5),
-    val outline: Color = Color(0xFF000000),
-    val textPrimary: Color = Color(0xFF000000),
-    val textSecondary: Color = Color(0xFF555555),
-    val textDim: Color = Color(0xFF999999),
-    val accent: Color = Color(0xFF000000),
-    val onAccent: Color = Color(0xFFFFFFFF),
-    val error: Color = Color(0xFFD32F2F),
+    val surface: Color = Color(0xFFF8F9FA),
+    val surfaceElevated: Color = Color(0xFFF1F3F4),
+    val outline: Color = Color(0xFFE8EAED),
+    val textPrimary: Color = Color(0xFF202124),
+    val textSecondary: Color = Color(0xFF5F6368),
+    val textDim: Color = Color(0xFF9AA0A6),
+    
+    val accentBlue: Color = Color(0xFF1A73E8),
+    val accentBlueBg: Color = Color(0xFFE8F0FE),
+    val accentGreen: Color = Color(0xFF137333),
+    val accentGreenBg: Color = Color(0xFFE6F4EA),
+    
+    val error: Color = Color(0xFFD93025),
+    val errorBg: Color = Color(0xFFFCE8E6)
 )
 
 val LocalPalette = staticCompositionLocalOf { Palette() }
 
-// Очень маленькие отступы
-object Space { val xs = 2.dp; val sm = 4.dp; val md = 8.dp; val lg = 12.dp; val xl = 16.dp }
-object Radius { val sm = 4.dp; val md = 8.dp; val lg = 12.dp; val pill = 999.dp }
-object Motion { const val medium = 250 }
+object Radius { val sm = 4.dp; val md = 8.dp; val lg = 12.dp }
+object Space { val xs = 4.dp; val sm = 8.dp; val md = 12.dp; val lg = 16.dp; val xl = 24.dp }
 
-// Мелкая типографика
 private val appTypography = Typography(
-    bodyLarge = TextStyle(color = Color.Black, fontSize = 12.sp, lineHeight = 16.sp),
-    bodyMedium = TextStyle(color = Color.DarkGray, fontSize = 11.sp, lineHeight = 14.sp),
-    labelLarge = TextStyle(color = Color.Black, fontSize = 10.sp, fontWeight = FontWeight.Medium),
-    labelSmall = TextStyle(color = Color.Gray, fontSize = 9.sp),
-    titleLarge = TextStyle(color = Color.Black, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+    bodyLarge = TextStyle(color = Color(0xFF202124), fontSize = 14.sp, lineHeight = 20.sp),
+    bodyMedium = TextStyle(color = Color(0xFF5F6368), fontSize = 13.sp, lineHeight = 18.sp),
+    labelLarge = TextStyle(color = Color(0xFF202124), fontSize = 12.sp, fontWeight = FontWeight.Medium),
+    labelSmall = TextStyle(color = Color(0xFF9AA0A6), fontSize = 11.sp),
+    titleLarge = TextStyle(color = Color(0xFF202124), fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
 )
 
 @Composable
 fun GeminiVoiceTheme(darkOverride: Boolean? = null, content: @Composable () -> Unit) {
-    val palette = Palette() // Принудительно белая минималистичная тема
+    val palette = Palette()
     val colorScheme = lightColorScheme(
-        primary = palette.accent, onPrimary = palette.onAccent,
+        primary = palette.accentBlue, onPrimary = Color.White,
         background = palette.background, onBackground = palette.textPrimary,
         surface = palette.surface, onSurface = palette.textPrimary,
         error = palette.error,
