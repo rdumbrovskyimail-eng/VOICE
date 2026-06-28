@@ -77,6 +77,10 @@ fun ClientScreen(
     viewModel: ClientViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
+    val presence = remember(state.isAiSpeaking, state.isConnected, state.isConnecting) {
+        if (state.isConnected) if (state.isAiSpeaking) "speaking" else "connected"
+        else if (state.isConnecting) "connecting" else "disconnected"
+    }
     val chatPrefs by viewModel.chatPrefs.collectAsStateWithLifecycle()
     val historyMessages by viewModel.historyMessages.collectAsStateWithLifecycle()
     val historyInfo by viewModel.historyInfo.collectAsStateWithLifecycle()
@@ -133,8 +137,9 @@ fun ClientScreen(
                 .imePadding()
         ) {
             // 1. HEADER
-            Header(
-                state = state,
+            AppHeader(
+                presence = presence,
+                isLinkActive = state.isConnected || state.isConnecting,
                 onToggleConnection = { onToggleConnection() },
                 onToggleHistory = { viewModel.toggleHistoryMode() },
                 onToggleCamera = { viewModel.toggleCamera() },
@@ -263,11 +268,16 @@ fun ClientScreen(
 
             // 4. CHAT AREA (занимает оставшееся место)
             Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
-                ChatList(
-                    messages = if (isHistory) historyMessages else state.transcript,
-                    prefs = chatPrefs,
-                    modifier = Modifier.fillMaxSize().padding(horizontal = 14.dp)
-                )
+                val messages = if (isHistory) historyMessages else state.transcript
+                if (messages.isEmpty()) {
+                    ChatEmptyState(modifier = Modifier.fillMaxSize())
+                } else {
+                    ChatList(
+                        messages = messages,
+                        prefs = chatPrefs,
+                        modifier = Modifier.fillMaxSize().padding(horizontal = 14.dp)
+                    )
+                }
             }
 
             // 5. BOTTOM AREA: WAVES + INPUT
@@ -281,12 +291,12 @@ fun ClientScreen(
                         .height(140.dp),
                     contentAlignment = Alignment.BottomCenter
                 ) {
-                    GeminiWaves(
+                    PresenceIndicator(
+                        presence = presence,
                         amplitudeProvider = { viewModel.amplitude.value },
-                        isActive = state.isConnected || state.isConnecting,
                         modifier = Modifier.fillMaxSize()
                     )
-                    InputRow(
+                    ChatInputBar(
                         value = chatInput,
                         onValueChange = { chatInput = it },
                         onAttach = { chatPicker.launch(arrayOf("*/*")) },
@@ -306,19 +316,21 @@ fun ClientScreen(
 }
 
 @Composable
-private fun Header(state: SessionManager.State, onToggleConnection: () -> Unit, onToggleHistory: () -> Unit, onToggleCamera: () -> Unit, onToggleCam: () -> Unit, onSettings: () -> Unit, modifier: Modifier = Modifier) {
-    val dotColor = when {
-        state.isConnected -> Color(0xFF66BB6A)
-        state.isConnecting -> Color(0xFFFFC107)
+private fun AppHeader(presence: String, isLinkActive: Boolean, onToggleConnection: () -> Unit, onToggleHistory: () -> Unit, onToggleCamera: () -> Unit, onToggleCam: () -> Unit, onSettings: () -> Unit, modifier: Modifier = Modifier) {
+    val dotColor = when (presence) {
+        "speaking" -> Color(0xFF66BB6A)
+        "connected" -> Color(0xFF66BB6A)
+        "connecting" -> Color(0xFFFFC107)
         else -> Color(0xFF9E9E9E)
     }
     Row(modifier = modifier.fillMaxWidth().height(52.dp), verticalAlignment = Alignment.CenterVertically) {
         Box(Modifier.size(10.dp).clip(CircleShape).background(dotColor))
         Spacer(Modifier.width(8.dp))
         Text(
-            when {
-                state.isConnected -> if (state.isAiSpeaking) "Ассистент говорит…" else "На связи"
-                state.isConnecting -> "Подключение…"
+            when (presence) {
+                "speaking" -> "Ассистент говорит…"
+                "connected" -> "На связи"
+                "connecting" -> "Подключение…"
                 else -> "Отключено"
             },
             color = TextDim, fontSize = 13.sp, fontWeight = FontWeight.Medium
@@ -326,9 +338,9 @@ private fun Header(state: SessionManager.State, onToggleConnection: () -> Unit, 
         Spacer(Modifier.weight(1f))
         IconButton(onClick = onToggleConnection) {
             Icon(
-                if (state.isConnected || state.isConnecting) Icons.Filled.Stop else Icons.Filled.PlayArrow,
+                if (isLinkActive) Icons.Filled.Stop else Icons.Filled.PlayArrow,
                 contentDescription = "Подключить/Отключить",
-                tint = if (state.isConnected || state.isConnecting) Color(0xFFEF5350) else AccentBlue,
+                tint = if (isLinkActive) Color(0xFFEF5350) else AccentBlue,
             )
         }
         IconButton(onClick = onToggleCamera) {
@@ -466,7 +478,7 @@ private fun MessageBubble(msg: ConversationMessage, prefs: ChatPrefs, timeFormat
 }
 
 @Composable
-private fun InputRow(value: String, onValueChange: (String) -> Unit, onAttach: () -> Unit, onSend: () -> Unit, isMicActive: Boolean, onToggleMic: () -> Unit, modifier: Modifier = Modifier) {
+private fun ChatInputBar(value: String, onValueChange: (String) -> Unit, onAttach: () -> Unit, onSend: () -> Unit, isMicActive: Boolean, onToggleMic: () -> Unit, modifier: Modifier = Modifier) {
     Row(modifier = modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
         IconButton(onClick = onAttach, modifier = Modifier.size(48.dp)) {
             Icon(Icons.Filled.AttachFile, contentDescription = "Прикрепить", tint = TextDim)
