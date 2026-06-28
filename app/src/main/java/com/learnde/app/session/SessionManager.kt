@@ -164,8 +164,6 @@ class SessionManager @Inject constructor(
     fun sendCameraFrame(jpeg: ByteArray) {
         if (!liveClient.isReady) return
         if (_state.value.mode != ClientMode.CAM && !_state.value.cameraOn) return
-        if (!_state.value.isMicActive) return
-        if (!_state.value.isAiSpeaking && _amplitude.value < 0.05f) return
         runCatching { liveClient.sendVideoFrame(jpeg) }
     }
 
