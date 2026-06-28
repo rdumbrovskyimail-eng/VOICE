@@ -72,10 +72,10 @@ fun SettingsScreen(onBack: () -> Unit, viewModel: SettingsViewModel = hiltViewMo
 private fun SettingsSection(title: String, content: @Composable ColumnScope.() -> Unit) {
     val pal = AppTheme.palette
     Column(modifier = Modifier.fillMaxWidth()) {
-        Text(title, color = pal.textPrimary, fontSize = 12.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(start = 4.dp, bottom = 4.dp))
+        Text(title, color = MaterialTheme.colorScheme.primary, fontSize = 13.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(start = 4.dp, bottom = 8.dp))
         Column(
-            modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)).background(pal.surfaceElevated).border(1.dp, pal.outline, RoundedCornerShape(8.dp)).padding(12.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp), content = content
+            modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(pal.surfaceElevated).padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp), content = content
         )
     }
 }
@@ -93,7 +93,7 @@ private fun SettingsTextField(label: String, value: String, onValueChange: (Stri
             shape = RoundedCornerShape(8.dp),
             colors = OutlinedTextFieldDefaults.colors(
                 focusedTextColor = pal.textPrimary, unfocusedTextColor = pal.textPrimary,
-                focusedBorderColor = pal.outline, unfocusedBorderColor = pal.outline,
+                focusedBorderColor = MaterialTheme.colorScheme.primary, unfocusedBorderColor = Color.Transparent,
                 focusedContainerColor = pal.background, unfocusedContainerColor = pal.background
             )
         )
@@ -105,7 +105,7 @@ private fun SettingsSlider(label: String, value: Float, onValueChange: (Float) -
     val pal = AppTheme.palette
     Column {
         Text(label, color = pal.textPrimary, fontSize = 11.sp)
-        Slider(value = value, onValueChange = onValueChange, valueRange = valueRange, colors = SliderDefaults.colors(thumbColor = pal.textPrimary, activeTrackColor = pal.textPrimary, inactiveTrackColor = pal.textDim))
+        Slider(value = value, onValueChange = onValueChange, valueRange = valueRange, colors = SliderDefaults.colors(thumbColor = MaterialTheme.colorScheme.primary, activeTrackColor = MaterialTheme.colorScheme.primary, inactiveTrackColor = pal.textDim))
     }
 }
 
@@ -114,7 +114,7 @@ private fun SettingsSwitch(label: String, checked: Boolean, onCheckedChange: (Bo
     val pal = AppTheme.palette
     Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
         Text(label, color = pal.textPrimary, fontSize = 11.sp)
-        Switch(checked = checked, onCheckedChange = onCheckedChange, colors = SwitchDefaults.colors(checkedThumbColor = pal.background, checkedTrackColor = pal.textPrimary, uncheckedTrackColor = pal.textDim))
+        Switch(checked = checked, onCheckedChange = onCheckedChange, colors = SwitchDefaults.colors(checkedThumbColor = pal.background, checkedTrackColor = MaterialTheme.colorScheme.primary, uncheckedTrackColor = pal.textDim))
     }
 }
 
@@ -127,7 +127,7 @@ private fun VoicePickerField(selectedId: String, onSelect: (String) -> Unit) {
         Text("Голос", color = pal.textPrimary, fontSize = 11.sp, modifier = Modifier.padding(bottom = 4.dp))
         Box {
             Row(
-                Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)).background(pal.background).border(1.dp, pal.outline, RoundedCornerShape(8.dp)).clickable { expanded = true }.padding(12.dp),
+                Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)).background(pal.background).clickable { expanded = true }.padding(12.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text("${current.id} · ${current.trait}", color = pal.textPrimary, fontSize = 11.sp, modifier = Modifier.weight(1f))
@@ -152,7 +152,7 @@ private fun ThinkingPickerField(selectedName: String, onSelect: (String) -> Unit
         Text("Мышление", color = pal.textPrimary, fontSize = 11.sp, modifier = Modifier.padding(bottom = 4.dp))
         Box {
             Row(
-                Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)).background(pal.background).border(1.dp, pal.outline, RoundedCornerShape(8.dp)).clickable { expanded = true }.padding(12.dp),
+                Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)).background(pal.background).clickable { expanded = true }.padding(12.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(current.displayName, color = pal.textPrimary, fontSize = 11.sp, modifier = Modifier.weight(1f))
