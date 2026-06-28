@@ -85,9 +85,6 @@ fun ClientScreen(
         hasError = state.error != null,
     )
     val chatPrefs by viewModel.chatPrefs.collectAsStateWithLifecycle()
-    val historyMessages by viewModel.historyMessages.collectAsStateWithLifecycle()
-    val historyInfo by viewModel.historyInfo.collectAsStateWithLifecycle()
-    val isHistory = state.mode == ClientMode.HISTORY
     val cameraActive = state.cameraOn || state.mode == ClientMode.CAM
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -144,10 +141,8 @@ fun ClientScreen(
                 presence = presence,
                 isLinkActive = state.isConnected || state.isConnecting,
                 camMode = state.mode == ClientMode.CAM,
-                historyMode = state.mode == ClientMode.HISTORY,
                 onToggleConnection = { onToggleConnection() },
                 onToggleCam = { viewModel.toggleCamMode() },
-                onToggleHistory = { viewModel.toggleHistoryMode() },
                 onSettings = { navController.navigate(Routes.SETTINGS) },
                 modifier = Modifier.padding(horizontal = 14.dp)
             )
@@ -198,14 +193,8 @@ fun ClientScreen(
                 }
             }
 
-            // 2. PROMPT ZONE (скрыт в History) / HISTORY CONTROLS
-            if (isHistory) HistoryControls(
-                info = historyInfo,
-                onApplyPrompt = { viewModel.applyHistoryPrompt(it) },
-                onClear = { viewModel.clearHistory() },
-                modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp),
-            )
-            if (!isHistory) Column(modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp)) {
+            // 2. PROMPT ZONE
+            Column(modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp)) {
                 PromptZone(
                     value = promptText,
                     onValueChange = { promptText = it },
@@ -272,7 +261,7 @@ fun ClientScreen(
 
             // 4. CHAT AREA (занимает оставшееся место)
             Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
-                val messages = if (isHistory) historyMessages else state.transcript
+                val messages = state.transcript
                 if (messages.isEmpty()) {
                     ChatEmptyState(modifier = Modifier.fillMaxSize())
                 } else {
@@ -579,68 +568,3 @@ private fun fileExt(ctx: android.content.Context, uri: Uri): String {
     return name.substringAfterLast('.', "").uppercase().take(4)
 }
 
-@Composable
-private fun HistoryControls(
-    info: HistoryInfo,
-    onApplyPrompt: (String) -> Unit,
-    onClear: () -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    var draft by remember { mutableStateOf("") }
-    var confirmClear by remember { mutableStateOf(false) }
-
-    Column(modifier.fillMaxWidth()) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Icon(Icons.Filled.History, null, tint = AccentBlue, modifier = Modifier.size(16.dp))
-            Spacer(Modifier.width(6.dp))
-            Text("Режим истории — диалоги сохраняются", color = AccentBlue, fontSize = 12.sp, fontWeight = FontWeight.Bold)
-        }
-        Spacer(Modifier.height(8.dp))
-
-        if (!info.locked) {
-            Row(Modifier.fillMaxWidth().height(56.dp), verticalAlignment = Alignment.CenterVertically) {
-                OutlinedTextField(
-                    value = draft,
-                    onValueChange = { draft = it },
-                    modifier = Modifier.weight(1f).fillMaxHeight(),
-                    placeholder = { Text("Постоянный промпт истории…", color = TextDim, fontSize = 13.sp) },
-                    textStyle = androidx.compose.ui.text.TextStyle(color = Color.White, fontSize = 14.sp),
-                    shape = RoundedCornerShape(12.dp),
-                    colors = darkFieldColors(),
-                )
-                Spacer(Modifier.width(8.dp))
-                IconButton(
-                    onClick = { if (draft.isNotBlank()) onApplyPrompt(draft) },
-                    modifier = Modifier.size(56.dp).clip(RoundedCornerShape(12.dp)).background(AccentBlue),
-                ) { Icon(Icons.Filled.Check, "Зафиксировать промпт", tint = Color.White) }
-            }
-        } else {
-            Box(
-                Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(Color(0xFF1E2229)).padding(12.dp)
-            ) {
-                Text(
-                    if (info.prompt.isBlank()) "Промпт не задан" else info.prompt,
-                    color = Color.White, fontSize = 13.sp,
-                )
-            }
-            Spacer(Modifier.height(8.dp))
-            OutlinedButton(onClick = { confirmClear = true }, modifier = Modifier.fillMaxWidth()) {
-                Icon(Icons.Filled.DeleteOutline, null, tint = Color(0xFFEF5350), modifier = Modifier.size(18.dp))
-                Spacer(Modifier.width(6.dp))
-                Text("Очистить историю и сменить промпт", color = Color(0xFFEF5350), fontSize = 13.sp)
-            }
-        }
-    }
-
-    if (confirmClear) {
-        AlertDialog(
-            onDismissRequest = { confirmClear = false },
-            title = { Text("Очистить историю?") },
-            text = { Text("Вся сохранённая история будет удалена без возможности восстановления. После этого можно задать новый промпт.") },
-            confirmButton = {
-                TextButton(onClick = { confirmClear = false; onClear() }) { Text("Удалить", color = Color(0xFFEF5350)) }
-            },
-            dismissButton = { TextButton(onClick = { confirmClear = false }) { Text("Отмена") } },
-        )
-    }
-}
