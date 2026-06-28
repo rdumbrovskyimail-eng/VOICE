@@ -34,7 +34,7 @@ data class Palette(
 
 val LocalPalette = staticCompositionLocalOf { Palette() }
 
-object Radius { val sm = 4.dp; val md = 8.dp; val lg = 12.dp }
+object Radius { val sm = 4.dp; val md = 8.dp; val lg = 12.dp; val pill = 999.dp }
 object Space { val xs = 4.dp; val sm = 8.dp; val md = 12.dp; val lg = 16.dp; val xl = 24.dp }
 
 private val appTypography = Typography(
