@@ -320,6 +320,7 @@ class SessionManager @Inject constructor(
                 isConnecting = false,
                 isMicActive = false,
                 isAiSpeaking = false,
+                transcript = emptyList()
             )
         }
     }
