@@ -76,6 +76,8 @@ class SessionManager @Inject constructor(
         val error: String? = null,
         val mode: ClientMode = ClientMode.NORMAL,
         val cameraOn: Boolean = false,
+        val totalTokens: Int = 0,
+        val searchUsed: Boolean = false,
     )
 
     companion object {
@@ -104,6 +106,7 @@ class SessionManager @Inject constructor(
     @Volatile private var bargeInEnabled: Boolean = false
     private val connectionMutex = Mutex()
     @Volatile private var isHistorySeeded = false
+    @Volatile private var lastPersistedHistoryTs: Long = 0L
 
     /** Вся сохранённая история как поток (для UI режима H). */
     val historyMessages = historyDao.observeAll()
@@ -294,6 +297,8 @@ class SessionManager @Inject constructor(
                 error = null,
                 activePrompt = prompt,
                 transcript = emptyList(),
+                totalTokens = 0,
+                searchUsed = false,
             )
         }
 
@@ -486,6 +491,10 @@ class SessionManager @Inject constructor(
                         appendTranscript(ConversationMessage.ROLE_MODEL, event.text)
                     }
 
+                    is GeminiEvent.UsageMetadata -> _state.update { it.copy(totalTokens = event.totalTokens) }
+
+                    is GeminiEvent.GroundingMetadata -> _state.update { it.copy(searchUsed = true) }
+
                     is GeminiEvent.ToolCall -> {
                         orchestrator.onModelActivity()
                         appScope.launch {
@@ -646,11 +655,10 @@ class SessionManager @Inject constructor(
 
     private suspend fun seedHistoryIfNeeded() {
         if (_state.value.mode != ClientMode.HISTORY) return
-        val history = historyDao.getAll().map { 
-            ConversationMessage(it.role, it.text) 
-        }
-        if (history.isNotEmpty()) {
-            liveClient.restoreContext(history)
+        val rows = historyDao.getAll()
+        lastPersistedHistoryTs = rows.maxOfOrNull { it.timestamp } ?: 0L
+        if (rows.isNotEmpty()) {
+            liveClient.restoreContext(rows.map { ConversationMessage(it.role, it.text, it.timestamp) })
         }
     }
 
@@ -658,10 +666,20 @@ class SessionManager @Inject constructor(
         // Вызывается ТОЛЬКО из GeminiEvent.TurnComplete
         if (_state.value.mode != ClientMode.HISTORY) return
         appScope.launch {
-            val msgs = _state.value.transcript.map { 
-                com.learnde.app.history.HistoryMessage(role = it.role, text = it.text, timestamp = it.timestamp) 
+            val newOnes = _state.value.transcript
+                .filter { it.timestamp > lastPersistedHistoryTs }
+                .sortedBy { it.timestamp }
+            if (newOnes.isEmpty()) return@launch
+            for (m in newOnes) {
+                historyDao.insert(
+                    com.learnde.app.history.HistoryMessage(
+                        role = m.role,
+                        text = m.text,
+                        timestamp = m.timestamp
+                    )
+                )
             }
-            historyDao.replaceHistory(msgs)
+            lastPersistedHistoryTs = newOnes.maxOf { it.timestamp }
         }
     }
 }

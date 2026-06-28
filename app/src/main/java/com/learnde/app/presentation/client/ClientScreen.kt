@@ -143,6 +143,21 @@ fun ClientScreen(
                 modifier = Modifier.padding(horizontal = 14.dp)
             )
 
+            if (chatPrefs.showUsageMetadata && (state.totalTokens > 0 || state.searchUsed)) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 2.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    if (state.totalTokens > 0) {
+                        Text("⛁ ${state.totalTokens} токенов", color = TextDim, fontSize = 11.sp)
+                    }
+                    if (state.searchUsed) {
+                        Spacer(Modifier.width(8.dp))
+                        Text("🔍 поиск использован", color = AccentBlue, fontSize = 11.sp)
+                    }
+                }
+            }
+
             // 🔥 ИНФОРМИРОВАНИЕ ОБ ОШИБКАХ (Вывод state.error)
             AnimatedVisibility(
                 visible = state.error != null,
@@ -423,6 +438,14 @@ private fun MessageBubble(msg: ConversationMessage, prefs: ChatPrefs, timeFormat
     Column(Modifier.fillMaxWidth(), horizontalAlignment = if (isUser) Alignment.End else Alignment.Start) {
         if (prefs.showRoleLabels) {
             Text(if (isUser) "Вы" else "Ассистент", color = TextDim, fontSize = (11 * prefs.fontScale).sp, modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp))
+        }
+        if (prefs.showTimestamps) {
+            Text(
+                timeFormatter.format(java.util.Date(msg.timestamp)),
+                color = TextDim,
+                fontSize = (10 * prefs.fontScale).sp,
+                modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp),
+            )
         }
         Box(
             Modifier.clip(RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp, bottomStart = if (isUser) 16.dp else 4.dp, bottomEnd = if (isUser) 4.dp else 16.dp))

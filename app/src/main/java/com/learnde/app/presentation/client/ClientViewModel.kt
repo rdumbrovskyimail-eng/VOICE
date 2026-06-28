@@ -27,6 +27,7 @@ data class ChatPrefs(
     val showRoleLabels: Boolean = true,
     val showTimestamps: Boolean = false,
     val autoScroll: Boolean = true,
+    val showUsageMetadata: Boolean = false,
 )
 
 @HiltViewModel
@@ -50,6 +51,7 @@ class ClientViewModel @Inject constructor(
                 showRoleLabels = it.chatShowRoleLabels,
                 showTimestamps = it.chatShowTimestamps,
                 autoScroll = it.chatAutoScroll,
+                showUsageMetadata = it.showUsageMetadata,
             )
         }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), ChatPrefs())
