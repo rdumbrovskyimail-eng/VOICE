@@ -273,36 +273,24 @@ fun ClientScreen(
                 }
             }
 
-            // 5. BOTTOM AREA: WAVES + INPUT
+            // 5. BOTTOM AREA: INPUT
             Column(modifier = Modifier.fillMaxWidth()) {
                 if (chatAttachments.isNotEmpty()) {
                     AttachmentChips(chatAttachments) { chatAttachments = chatAttachments - it }
                 }
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(140.dp),
-                    contentAlignment = Alignment.BottomCenter
-                ) {
-                    PresenceIndicator(
-                        presence = presence,
-                        amplitudeProvider = { viewModel.amplitude.value },
-                        modifier = Modifier.fillMaxSize()
-                    )
-                    ChatInputBar(
-                        value = chatInput,
-                        onValueChange = { chatInput = it },
-                        onAttach = { chatPicker.launch(arrayOf("*/*")) },
-                        onSend = {
-                            viewModel.sendText(chatInput, chatAttachments)
-                            chatInput = ""
-                            chatAttachments = emptyList()
-                        },
-                        isMicActive = state.isMicActive,
-                        onToggleMic = { onToggleMic() },
-                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 16.dp)
-                    )
-                }
+                ChatInputBar(
+                    value = chatInput,
+                    onValueChange = { chatInput = it },
+                    onAttach = { chatPicker.launch(arrayOf("*/*")) },
+                    onSend = {
+                        viewModel.sendText(chatInput, chatAttachments)
+                        chatInput = ""
+                        chatAttachments = emptyList()
+                    },
+                    isMicActive = state.isMicActive,
+                    onToggleMic = { onToggleMic() },
+                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 16.dp)
+                )
             }
         }
     }
