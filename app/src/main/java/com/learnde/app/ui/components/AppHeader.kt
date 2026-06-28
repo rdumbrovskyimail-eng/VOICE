@@ -1,9 +1,7 @@
 // Путь: app/src/main/java/com/learnde/app/ui/components/AppHeader.kt
 //
-// Верхний тулбар на токенах Theme.kt. Слева — статус присутствия (StatusLabel),
-// справа — действия. Главное действие (подключение) выделено заливкой-акцентом,
-// второстепенные — иконки, активные подсвечиваются акцентом. Поведение 1:1 с прежним
-// Header (те же иконки/коллбэки), меняется только оформление и консистентность.
+// Верхний тулбар на токенах. Слева — статус присутствия, справа — действия.
+// Фото-иконка убрана (камера управляется иконкой видео/CAM). Поведение прочего 1:1.
 
 package com.learnde.app.ui.components
 
@@ -13,11 +11,9 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.weight
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.History
-import androidx.compose.material.icons.filled.PhotoCamera
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Stop
@@ -37,11 +33,9 @@ import com.learnde.app.ui.theme.Radius
 fun AppHeader(
     presence: Presence,
     isLinkActive: Boolean,          // isConnected || isConnecting → показываем Stop
-    cameraOn: Boolean,
     camMode: Boolean,
     historyMode: Boolean,
     onToggleConnection: () -> Unit,
-    onToggleCamera: () -> Unit,
     onToggleCam: () -> Unit,
     onToggleHistory: () -> Unit,
     onSettings: () -> Unit,
@@ -53,9 +47,9 @@ fun AppHeader(
         verticalAlignment = Alignment.CenterVertically,
     ) {
         StatusLabel(presence)
-        Spacer(Modifier.weight(1f))
+        Spacer(Modifier.weight(1f))   // RowScope.weight — импортировать НЕ нужно
 
-        // Главное действие — подключение. Заливка-акцент, чтобы выделялось среди иконок.
+        // Главное действие — подключение. Заливка-акцент.
         IconButton(
             onClick = onToggleConnection,
             modifier = Modifier.size(40.dp).clip(RoundedCornerShape(Radius.md))
@@ -68,8 +62,7 @@ fun AppHeader(
             )
         }
 
-        ToolbarIcon(Icons.Filled.PhotoCamera, "Камера", active = cameraOn, onClick = onToggleCamera)
-        ToolbarIcon(Icons.Filled.Videocam, "Режим камеры", active = camMode, onClick = onToggleCam)
+        ToolbarIcon(Icons.Filled.Videocam, "Камера", active = camMode, onClick = onToggleCam)
         ToolbarIcon(Icons.Filled.History, "История", active = historyMode, onClick = onToggleHistory)
         ToolbarIcon(Icons.Filled.Settings, "Настройки", active = false, onClick = onSettings)
     }
