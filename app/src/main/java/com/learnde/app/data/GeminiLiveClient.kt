@@ -460,13 +460,22 @@ class GeminiLiveClient(
 
     override fun sendClientTurn(text: String, jpegImages: List<ByteArray>, turnComplete: Boolean) {
         if (!isReady) return
+        internalScope.launch {
+            // 1) Сначала ВСЕ кадры картинок (OkHttp пишет их в сокет строго по порядку).
+            for (img in jpegImages) sendVideoFrame(img)
 
-        for (img in jpegImages) {
-            sendVideoFrame(img)
-        }
+            if (jpegImages.isNotEmpty()) {
+                // 2) Ждём, пока байты картинок реально уйдут из буфера сокета в сеть.
+                val ws = webSocket
+                withTimeoutOrNull(4000) {
+                    while (ws != null && ws.queueSize() > 0) delay(20)
+                }
+                // 3) Фора серверу на приём/декод перед тем, как текст завершит ход.
+                delay(200)
+            }
 
-        if (text.isNotBlank()) {
-            sendRealtimeText(text)
+            // 4) Только теперь — сопутствующий текст (он и триггерит ответ модели).
+            if (text.isNotBlank()) sendRealtimeText(text)
         }
     }
 
