@@ -15,6 +15,7 @@ interface AudioEngine {
     suspend fun flushPlayback()
     suspend fun onTurnComplete()
     suspend fun initPlayback()
+    fun resetPlaybackClock()
     suspend fun releaseAll()
 
     fun updateJitterConfig(preBufferChunks: Int, timeoutMs: Long, queueCapacity: Int)
