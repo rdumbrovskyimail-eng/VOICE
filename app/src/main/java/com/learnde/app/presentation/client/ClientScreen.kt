@@ -21,6 +21,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
@@ -102,8 +103,7 @@ fun ClientScreen(navController: NavController, viewModel: ClientViewModel = hilt
                         colors = OutlinedTextFieldDefaults.colors(
                             focusedBorderColor = Color.Transparent, unfocusedBorderColor = Color.Transparent,
                             focusedContainerColor = Color.Transparent, unfocusedContainerColor = Color.Transparent
-                        ),
-                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp)
+                        )
                     )
                     
                     IconButton(
@@ -267,7 +267,7 @@ private fun AttachmentTile(ctx: android.content.Context, uri: Uri, onRemove: (Ur
         val b = bmp
         if (b != null) {
             androidx.compose.foundation.Image(
-                bitmap = androidx.compose.ui.graphics.asImageBitmap(b), 
+                bitmap = b.asImageBitmap(), 
                 contentDescription = null, 
                 modifier = Modifier.fillMaxSize(), 
                 contentScale = androidx.compose.ui.layout.ContentScale.Crop
