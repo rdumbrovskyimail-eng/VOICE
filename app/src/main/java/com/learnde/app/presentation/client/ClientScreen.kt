@@ -53,6 +53,7 @@ fun ClientScreen(navController: NavController, viewModel: ClientViewModel = hilt
 
     var promptText by remember { mutableStateOf("") }
     var chatInput by remember { mutableStateOf("") }
+    var frontCamera by remember { mutableStateOf(true) }
     
     var promptAttachments by remember { mutableStateOf<List<Uri>>(emptyList()) }
     var chatAttachments by remember { mutableStateOf<List<Uri>>(emptyList()) }
@@ -71,9 +72,9 @@ fun ClientScreen(navController: NavController, viewModel: ClientViewModel = hilt
             
             // 1. ШАПКА
             AppHeader(
-                presence = presence, isLinkActive = state.isConnected || state.isConnecting, camMode = state.mode == ClientMode.CAM,
+                presence = presence, isLinkActive = state.isConnected || state.isConnecting, camMode = state.cameraOn,
                 onToggleConnection = { if (hasRecord()) viewModel.toggleConnection() else connectLauncher.launch(arrayOf(Manifest.permission.RECORD_AUDIO)) },
-                onToggleCam = { viewModel.toggleCamMode() }, onSettings = { navController.navigate(Routes.SETTINGS) },
+                onToggleCam = { viewModel.toggleCamera() }, onSettings = { navController.navigate(Routes.SETTINGS) },
                 modifier = Modifier.padding(horizontal = Space.lg, vertical = Space.sm)
             )
 
@@ -170,8 +171,20 @@ fun ClientScreen(navController: NavController, viewModel: ClientViewModel = hilt
                 ) {
                     CameraLayer(
                         active = true, onFrame = { viewModel.sendCameraFrame(it) },
+                        front = frontCamera,
                         modifier = Modifier.fillMaxWidth().height(200.dp).clip(RoundedCornerShape(Radius.lg)),
                     )
+                    IconButton(
+                        onClick = { frontCamera = !frontCamera },
+                        modifier = Modifier
+                            .align(Alignment.BottomEnd)
+                            .padding(Space.sm)
+                            .clip(CircleShape)
+                            .background(Color.Black.copy(alpha = 0.6f))
+                            .size(36.dp)
+                    ) {
+                        Icon(Icons.Filled.Cameraswitch, "Перевернуть камеру", tint = Color.White, modifier = Modifier.size(20.dp))
+                    }
                     // Индикатор LIVE
                     Row(
                         modifier = Modifier
