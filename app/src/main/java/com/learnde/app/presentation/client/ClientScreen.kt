@@ -3,6 +3,7 @@ package com.learnde.app.presentation.client
 import android.Manifest
 import android.content.pm.PackageManager
 import android.net.Uri
+import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
@@ -107,7 +108,14 @@ fun ClientScreen(navController: NavController, viewModel: ClientViewModel = hilt
                     )
                     
                     IconButton(
-                        onClick = { viewModel.applyPrompt(promptText.trim(), promptAttachments); promptAttachments = emptyList() },
+                        onClick = { 
+                            val p = promptText.trim()
+                            val hadAttach = promptAttachments.isNotEmpty()
+                            viewModel.applyPrompt(p, promptAttachments)
+                            promptAttachments = emptyList()
+                            if (p.isNotEmpty() || hadAttach)
+                                Toast.makeText(context, "Промпт установлен!", Toast.LENGTH_SHORT).show()
+                        },
                         modifier = Modifier.size(36.dp).clip(RoundedCornerShape(Radius.sm)).background(pal.accentBlueBg)
                     ) { Icon(Icons.Filled.Check, "Применить", tint = pal.accentBlue, modifier = Modifier.size(18.dp)) }
                 }
