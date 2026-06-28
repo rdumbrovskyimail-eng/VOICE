@@ -1,4 +1,3 @@
-// Путь: app/src/main/java/com/learnde/app/presentation/camera/CameraPreview.kt
 package com.learnde.app.presentation.camera
 
 import android.Manifest
@@ -19,6 +18,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.FlashOff
 import androidx.compose.material.icons.filled.FlashOn
@@ -43,19 +43,16 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.Observer
 import androidx.lifecycle.compose.LocalLifecycleOwner
+import com.learnde.app.ui.theme.Radius
+import com.learnde.app.ui.theme.Space
 import java.io.ByteArrayOutputStream
 import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicLong
 
-private const val FRAME_INTERVAL_MS = 1000L   // ≤ 1 FPS — лимит Live API
-private const val MAX_SIDE = 768              // рекомендация Google для кадров
+private const val FRAME_INTERVAL_MS = 1000L
+private const val MAX_SIDE = 768
 private const val JPEG_QUALITY = 70
 
-/**
- * Обёртка: запрашивает разрешение CAMERA, показывает живое превью и отдаёт
- * JPEG-кадры (не чаще 1 в секунду) наружу через [onFrame].
- * Камера привязана к жизненному циклу: уходит в фон → камера сама отключается.
- */
 @Composable
 fun CameraLayer(
     active: Boolean,
@@ -99,12 +96,6 @@ private fun CameraPreview(
     val lastSent = remember { AtomicLong(0L) }
     val callback by rememberUpdatedState(onFrame)
 
-    // ── Фонарик (torch) ──
-    // camera != null только пока биндинг жив. hasFlash — есть ли вспышка у задней камеры
-    // (на части устройств её нет — тогда кнопку не показываем).
-    // torchOn зеркалит ФАКТИЧЕСКОЕ состояние вспышки (TorchState), а не «наше желание»:
-    // если систему её выключит (уход в фон, перегрев) — кнопка сама вернётся в выкл,
-    // без рассинхрона UI ↔ железо.
     var camera by remember { mutableStateOf<Camera?>(null) }
     var hasFlash by remember { mutableStateOf(false) }
     var torchOn by remember { mutableStateOf(false) }
@@ -153,7 +144,6 @@ private fun CameraPreview(
                     boundCamera = cam
                     camera = cam
                     hasFlash = cam.cameraInfo.hasFlashUnit()
-                    // Зеркалим фактическое состояние вспышки в UI-состояние.
                     val obs = Observer<Int> { st -> torchOn = (st == TorchState.ON) }
                     torchObserver = obs
                     cam.cameraInfo.torchState.observe(lifecycleOwner, obs)
@@ -162,8 +152,6 @@ private fun CameraPreview(
         }, ContextCompat.getMainExecutor(context))
 
         onDispose {
-            // Гасим вспышку и снимаем наблюдателя ДО отвязки, чтобы фонарик не остался
-            // включённым после ухода с экрана.
             runCatching { boundCamera?.cameraControl?.enableTorch(false) }
             torchObserver?.let { obs ->
                 runCatching { boundCamera?.cameraInfo?.torchState?.removeObserver(obs) }
@@ -179,23 +167,23 @@ private fun CameraPreview(
     Box(modifier = modifier.fillMaxSize()) {
         AndroidView(factory = { previewView }, modifier = Modifier.fillMaxSize())
 
-        // Кнопка фонарика — поверх превью, только если у камеры есть вспышка.
         if (hasFlash) {
             IconButton(
                 onClick = {
-                    // enableTorch идемпотентен; видимое состояние подтянется через TorchState.
                     runCatching { camera?.cameraControl?.enableTorch(!torchOn) }
                 },
                 modifier = Modifier
                     .align(Alignment.TopEnd)
-                    .padding(8.dp)
-                    .size(40.dp)
-                    .background(Color.Black.copy(alpha = 0.45f)),
+                    .padding(Space.sm)
+                    .size(36.dp)
+                    .clip(RoundedCornerShape(Radius.md))
+                    .background(Color.Black.copy(alpha = 0.5f)),
             ) {
                 Icon(
                     imageVector = if (torchOn) Icons.Filled.FlashOn else Icons.Filled.FlashOff,
                     contentDescription = if (torchOn) "Выключить фонарик" else "Включить фонарик",
-                    tint = if (torchOn) Color(0xFFFFD54F) else Color.White,
+                    tint = if (torchOn) Color(0xFFFDE293) else Color.White,
+                    modifier = Modifier.size(18.dp)
                 )
             }
         }
