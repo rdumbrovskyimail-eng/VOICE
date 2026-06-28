@@ -38,11 +38,6 @@ class ClientViewModel @Inject constructor(
 
     val state = session.state
     val amplitude = session.amplitude
-    val historyMessages = session.historyMessages
-
-    val historyInfo: StateFlow<HistoryInfo> = settingsStore.data
-        .map { HistoryInfo(prompt = it.historyPrompt, locked = it.historyPromptLocked) }
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), HistoryInfo())
 
     val chatPrefs: StateFlow<ChatPrefs> = settingsStore.data
         .map {
@@ -64,16 +59,7 @@ class ClientViewModel @Inject constructor(
     fun clearError() = session.clearError()
     fun retry() = session.retry()
 
-    fun toggleHistoryMode() {
-        val next = if (state.value.mode == ClientMode.HISTORY) ClientMode.NORMAL else ClientMode.HISTORY
-        session.setMode(next)
-    }
-    fun applyHistoryPrompt(prompt: String) = session.setHistoryPrompt(prompt)
-    fun clearHistory() = session.clearHistory()
-
     fun toggleCamera() = session.setCameraOn(!state.value.cameraOn)
     fun toggleCamMode() = session.toggleCamMode()
     fun sendCameraFrame(jpeg: ByteArray) = session.sendCameraFrame(jpeg)
 }
-
-data class HistoryInfo(val prompt: String = "", val locked: Boolean = false)
