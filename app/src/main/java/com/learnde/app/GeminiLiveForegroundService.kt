@@ -24,11 +24,12 @@ import android.content.pm.ServiceInfo
 import android.media.AudioAttributes
 import android.media.AudioFocusRequest
 import android.media.AudioManager
+import android.net.wifi.WifiManager
 import android.os.Build
 import android.os.IBinder
+import android.os.PowerManager
 import androidx.core.app.NotificationCompat
 import com.learnde.app.session.SessionManager
-import kotlinx.coroutines.runBlocking
 import dagger.hilt.android.AndroidEntryPoint
 import javax.inject.Inject
 
@@ -61,6 +62,29 @@ class GeminiLiveForegroundService : Service() {
 
     private var audioManager: AudioManager? = null
     private var focusRequest: AudioFocusRequest? = null
+    private var wakeLock: PowerManager.WakeLock? = null
+    private var wifiLock: WifiManager.WifiLock? = null
+
+    private fun acquireLocks() {
+        if (wakeLock?.isHeld == true) return
+        val pm = getSystemService(Context.POWER_SERVICE) as PowerManager
+        wakeLock = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "learnde:session").apply {
+            setReferenceCounted(false)
+            acquire(2 * 60 * 60 * 1000L) // предохранитель 2 ч
+        }
+        val wm = applicationContext.getSystemService(Context.WIFI_SERVICE) as WifiManager
+        val mode = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q)
+            WifiManager.WIFI_MODE_FULL_LOW_LATENCY else WifiManager.WIFI_MODE_FULL_HIGH_PERF
+        wifiLock = wm.createWifiLock(mode, "learnde:session").apply {
+            setReferenceCounted(false)
+            acquire()
+        }
+    }
+
+    private fun releaseLocks() {
+        runCatching { if (wakeLock?.isHeld == true) wakeLock?.release() }; wakeLock = null
+        runCatching { if (wifiLock?.isHeld == true) wifiLock?.release() }; wifiLock = null
+    }
 
     override fun onCreate() {
         super.onCreate()
@@ -72,21 +96,24 @@ class GeminiLiveForegroundService : Service() {
         startForegroundSafe()
 
         when (intent?.action) {
-            ACTION_START -> requestMediaAudioFocus()
+            ACTION_START -> { requestMediaAudioFocus(); acquireLocks() }
             ACTION_USER_STOP -> {
                 // Пользователь нажал «Стоп» в шторке → полный стоп сессии.
                 runCatching { sessionManager.shutdown() }
+                releaseLocks()
                 releaseAudioFocus()
                 stopForeground(STOP_FOREGROUND_REMOVE)
                 stopSelf()
             }
             ACTION_STOP -> {
                 // Внутренний стоп (сессия уже останавливается сама) → только гасим сервис.
+                releaseLocks()
                 releaseAudioFocus()
                 stopForeground(STOP_FOREGROUND_REMOVE)
                 stopSelf()
             }
             else -> {
+                releaseLocks()
                 stopForeground(STOP_FOREGROUND_REMOVE)
                 stopSelf()
             }
@@ -185,15 +212,13 @@ class GeminiLiveForegroundService : Service() {
 
     override fun onTaskRemoved(rootIntent: Intent?) {
         super.onTaskRemoved(rootIntent)
-        // Свайп из «недавних» → полностью гасим сессию, а не только сервис.
-        kotlinx.coroutines.runBlocking { runCatching { sessionManager.shutdown() } }
-        releaseAudioFocus()
-        stopForeground(STOP_FOREGROUND_REMOVE)
-        stopSelf()
+        // Свайп из «недавних» НЕ останавливает сессию — она живёт в фоне через FGS.
+        // Остановка доступна кнопкой «Завершить сессию» в уведомлении (ACTION_USER_STOP).
     }
 
     override fun onDestroy() {
         super.onDestroy()
+        releaseLocks()
         releaseAudioFocus()
     }
 
