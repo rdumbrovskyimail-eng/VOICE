@@ -385,7 +385,7 @@ class AndroidAudioEngine @Inject constructor(
             audioTrack?.apply {
                 runCatching { 
                     if (state == AudioTrack.STATE_INITIALIZED) {
-                        pause(); flush()
+                        pause(); flush(); play()
                     }
                 }
             }
