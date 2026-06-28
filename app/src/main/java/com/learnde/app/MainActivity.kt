@@ -14,9 +14,10 @@ import androidx.activity.compose.setContent
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.LaunchedEffect
+import com.learnde.app.domain.model.ThemeMode
+import com.learnde.app.ui.theme.GeminiVoiceTheme
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -37,13 +38,15 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
 
         setContent {
-            MaterialTheme {
+            val gate: GateViewModel = hiltViewModel()
+            val themeMode by gate.themeMode.collectAsStateWithLifecycle()
+            val dark = when (themeMode) { ThemeMode.DARK -> true; ThemeMode.LIGHT -> false; else -> null }
+
+            GeminiVoiceTheme(darkOverride = dark) {
                 Surface(
-                    modifier = Modifier.fillMaxSize(),
-                    color = MaterialTheme.colorScheme.background
+                    modifier = Modifier.fillMaxSize()
                 ) {
                     val navController = rememberNavController()
-                    val gate: GateViewModel = hiltViewModel()
                     val needsOnboarding by gate.needsOnboarding.collectAsStateWithLifecycle()
 
                     if (needsOnboarding == null) {
