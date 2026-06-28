@@ -20,9 +20,8 @@ import androidx.compose.material.icons.filled.AttachFile
 import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.InsertDriveFile
-import androidx.compose.material.icons.filled.PhotoCamera
-import androidx.compose.material.icons.filled.Videocam
 import androidx.compose.material3.AlertDialog
+import com.learnde.app.ui.components.*
 import com.learnde.app.presentation.camera.CameraLayer
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.TextButton
@@ -77,10 +76,14 @@ fun ClientScreen(
     viewModel: ClientViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
-    val presence = remember(state.isAiSpeaking, state.isConnected, state.isConnecting) {
-        if (state.isConnected) if (state.isAiSpeaking) "speaking" else "connected"
-        else if (state.isConnecting) "connecting" else "disconnected"
-    }
+    val presence = presenceOf(
+        isConnected = state.isConnected,
+        isConnecting = state.isConnecting,
+        isRecovering = state.isRecovering,
+        isMicActive = state.isMicActive,
+        isAiSpeaking = state.isAiSpeaking,
+        hasError = state.error != null,
+    )
     val chatPrefs by viewModel.chatPrefs.collectAsStateWithLifecycle()
     val historyMessages by viewModel.historyMessages.collectAsStateWithLifecycle()
     val historyInfo by viewModel.historyInfo.collectAsStateWithLifecycle()
@@ -140,10 +143,11 @@ fun ClientScreen(
             AppHeader(
                 presence = presence,
                 isLinkActive = state.isConnected || state.isConnecting,
+                camMode = state.mode == ClientMode.CAM,
+                historyMode = state.mode == ClientMode.HISTORY,
                 onToggleConnection = { onToggleConnection() },
-                onToggleHistory = { viewModel.toggleHistoryMode() },
-                onToggleCamera = { viewModel.toggleCamera() },
                 onToggleCam = { viewModel.toggleCamMode() },
+                onToggleHistory = { viewModel.toggleHistoryMode() },
                 onSettings = { navController.navigate(Routes.SETTINGS) },
                 modifier = Modifier.padding(horizontal = 14.dp)
             )
@@ -315,61 +319,7 @@ fun ClientScreen(
     }
 }
 
-@Composable
-private fun AppHeader(presence: String, isLinkActive: Boolean, onToggleConnection: () -> Unit, onToggleHistory: () -> Unit, onToggleCamera: () -> Unit, onToggleCam: () -> Unit, onSettings: () -> Unit, modifier: Modifier = Modifier) {
-    val dotColor = when (presence) {
-        "speaking" -> Color(0xFF66BB6A)
-        "connected" -> Color(0xFF66BB6A)
-        "connecting" -> Color(0xFFFFC107)
-        else -> Color(0xFF9E9E9E)
-    }
-    Row(modifier = modifier.fillMaxWidth().height(52.dp), verticalAlignment = Alignment.CenterVertically) {
-        Box(Modifier.size(10.dp).clip(CircleShape).background(dotColor))
-        Spacer(Modifier.width(8.dp))
-        Text(
-            when (presence) {
-                "speaking" -> "Ассистент говорит…"
-                "connected" -> "На связи"
-                "connecting" -> "Подключение…"
-                else -> "Отключено"
-            },
-            color = TextDim, fontSize = 13.sp, fontWeight = FontWeight.Medium
-        )
-        Spacer(Modifier.weight(1f))
-        IconButton(onClick = onToggleConnection) {
-            Icon(
-                if (isLinkActive) Icons.Filled.Stop else Icons.Filled.PlayArrow,
-                contentDescription = "Подключить/Отключить",
-                tint = if (isLinkActive) Color(0xFFEF5350) else AccentBlue,
-            )
-        }
-        IconButton(onClick = onToggleCamera) {
-            Icon(
-                Icons.Filled.PhotoCamera,
-                contentDescription = "Камера",
-                tint = if (state.cameraOn) AccentBlue else TextDim,
-            )
-        }
-        IconButton(onClick = onToggleCam) {
-            Icon(
-                Icons.Filled.Videocam,
-                contentDescription = "Режим Cam",
-                tint = if (state.mode == ClientMode.CAM) AccentBlue else TextDim,
-            )
-        }
-        val historyOn = state.mode == ClientMode.HISTORY
-        IconButton(onClick = onToggleHistory) {
-            Icon(
-                Icons.Filled.History,
-                contentDescription = "Режим истории",
-                tint = if (historyOn) AccentBlue else TextDim,
-            )
-        }
-        IconButton(onClick = onSettings) {
-            Icon(Icons.Filled.Settings, contentDescription = "Настройки", tint = TextDim)
-        }
-    }
-}
+
 
 @Composable
 private fun PromptZone(
