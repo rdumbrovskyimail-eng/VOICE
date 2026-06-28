@@ -59,7 +59,6 @@ class SessionManager @Inject constructor(
     private val orchestrator: ConnectionOrchestrator,
     private val settingsStore: DataStore<AppSettings>,
     private val attachmentProcessor: com.learnde.app.attach.AttachmentProcessor,
-    private val historyDao: com.learnde.app.history.HistoryDao,
     private val logger: AppLogger,
 ) {
 
@@ -105,13 +104,6 @@ class SessionManager @Inject constructor(
 
     @Volatile private var bargeInEnabled: Boolean = false
     private val connectionMutex = Mutex()
-    @Volatile private var isHistorySeeded = false
-    @Volatile private var lastPersistedHistoryTs: Long = 0L
-
-    /** Вся сохранённая история как поток (для UI режима H). */
-    val historyMessages = historyDao.observeAll()
-        .map { rows -> rows.map { ConversationMessage(it.role, it.text) } }
-        .stateIn(appScope, SharingStarted.Eagerly, emptyList())
 
     init {
         wireOrchestratorCallbacks()
@@ -154,25 +146,6 @@ class SessionManager @Inject constructor(
             _state.update { it.copy(mode = newMode) }
             val s = _state.value
             if (s.isConnected || s.isConnecting) { stopInternal(); startInternal(activePrompt) }
-        }
-    }
-
-    /** Зафиксировать промпт History (одноразово, до Clear) и поднять сессию с посевом истории. */
-    fun setHistoryPrompt(prompt: String) {
-        appScope.launch {
-            settingsStore.updateData { it.copy(historyPrompt = prompt.trim(), historyPromptLocked = true) }
-            _state.update { it.copy(mode = ClientMode.HISTORY) }
-            stopInternal(); startInternal(activePrompt)
-        }
-    }
-
-    /** Очистить всю историю и разблокировать промпт (Clear после подтверждения). */
-    fun clearHistory() {
-        appScope.launch {
-            historyDao.clear()
-            settingsStore.updateData { it.copy(historyPrompt = "", historyPromptLocked = false) }
-            val s = _state.value
-            if (s.mode == ClientMode.HISTORY && (s.isConnected || s.isConnecting)) { stopInternal(); startInternal(activePrompt) }
         }
     }
 
@@ -302,8 +275,6 @@ class SessionManager @Inject constructor(
             )
         }
 
-        isHistorySeeded = false
-
         // Применяем аудио-настройки к движку (раньше игнорировались).
         audioEngine.setPlaybackVolume(settings.playbackVolume / 100f)
         audioEngine.setMicGain(settings.micGain / 100f)
@@ -395,20 +366,18 @@ class SessionManager @Inject constructor(
             activityHandling = settings.activityHandling,
             systemInstruction = when (_state.value.mode) {
                 ClientMode.CAM -> CAM_SYSTEM_PROMPT
-                ClientMode.HISTORY -> buildSystemInstruction(settings.historyPrompt, "")
                 else -> buildSystemInstruction(settings.systemInstruction, prompt)
             },
             inputTranscription = settings.inputTranscription,
             outputTranscription = settings.outputTranscription,
             enableSessionResumption = settings.enableSessionResumption,
-            // В History читаем всю историю целиком — сжатие выключаем.
-            enableContextCompression = _state.value.mode != ClientMode.HISTORY && settings.enableContextCompression,
+            enableContextCompression = settings.enableContextCompression,
             compressionTriggerTokens = settings.compressionTriggerTokens,
             compressionTargetTokens = settings.compressionTargetTokens,
             enableGoogleSearch = settings.enableGoogleSearch,
             functionDeclarations = listOf(dashboardFunction), // ИСПРАВЛЕНО: передаем список напрямую
             sendAudioStreamEnd = settings.sendAudioStreamEnd,
-            seedHistoryInClientContent = _state.value.mode == ClientMode.HISTORY,
+            seedHistoryInClientContent = false,
         )
     }
 
@@ -444,10 +413,8 @@ class SessionManager @Inject constructor(
                     isRecovering = link == LinkState.RECOVERING || link == LinkState.ROTATING,
                 ) }
                 if (link == LinkState.READY) {
-                    if (liveClient.sessionHandle == null && !isHistorySeeded) {
-                        isHistorySeeded = true
+                    if (liveClient.sessionHandle == null) {
                         appScope.launch {
-                            seedHistoryIfNeeded()
                             flushPromptAttachments()
                         }
                     }
@@ -474,7 +441,6 @@ class SessionManager @Inject constructor(
                         streamingRole = null
                         _state.update { it.copy(isAiSpeaking = false) }
                         audioEngine.onTurnComplete()
-                        flushHistory()
                     }
 
                     is GeminiEvent.Interrupted -> {
@@ -655,33 +621,4 @@ class SessionManager @Inject constructor(
         runCatching { context.startService(GeminiLiveForegroundService.stopIntent(context)) }
     }
 
-    private suspend fun seedHistoryIfNeeded() {
-        if (_state.value.mode != ClientMode.HISTORY) return
-        val rows = historyDao.getAll()
-        lastPersistedHistoryTs = rows.maxOfOrNull { it.timestamp } ?: 0L
-        if (rows.isNotEmpty()) {
-            liveClient.restoreContext(rows.map { ConversationMessage(it.role, it.text, it.timestamp) })
-        }
-    }
-
-    private fun flushHistory() {
-        // Вызывается ТОЛЬКО из GeminiEvent.TurnComplete
-        if (_state.value.mode != ClientMode.HISTORY) return
-        appScope.launch {
-            val newOnes = _state.value.transcript
-                .filter { it.timestamp > lastPersistedHistoryTs }
-                .sortedBy { it.timestamp }
-            if (newOnes.isEmpty()) return@launch
-            for (m in newOnes) {
-                historyDao.insert(
-                    com.learnde.app.history.HistoryMessage(
-                        role = m.role,
-                        text = m.text,
-                        timestamp = m.timestamp
-                    )
-                )
-            }
-            lastPersistedHistoryTs = newOnes.maxOf { it.timestamp }
-        }
-    }
 }
