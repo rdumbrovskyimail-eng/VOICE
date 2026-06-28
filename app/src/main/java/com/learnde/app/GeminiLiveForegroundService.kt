@@ -1,16 +1,3 @@
-// Путь: app/src/main/java/com/learnde/app/GeminiLiveForegroundService.kt
-//
-// Изменения этой версии (поверх исходной):
-//   • ИСПРАВЛЕН «тихий звук после закрытия»: при свайпе из недавних (onTaskRemoved) и при
-//     нажатии «Стоп» в шторке сервис теперь ВЫЗЫВАЕТ sessionManager.shutdown() — закрывает
-//     WebSocket и освобождает аудио-движок. Раньше глушился только сервис, а сессия (синглтон)
-//     продолжала играть звук в фоне.
-//   • Кнопка уведомления использует новое действие ACTION_USER_STOP (полный стоп), а внутренний
-//     ACTION_STOP (его шлёт SessionManager.stopService) только гасит сервис — это исключает
-//     зацикливание stop → stop.
-//   • Android 9 hardening: если startForeground падает — вызываем stopSelf(), чтобы не словить
-//     ANR «did not call startForeground» на старых устройствах.
-
 package com.learnde.app
 
 import android.app.Notification
@@ -25,10 +12,8 @@ import android.media.AudioAttributes
 import android.media.AudioFocusRequest
 import android.media.AudioManager
 import android.net.wifi.WifiManager
-import android.net.wifi.WifiManager
 import android.os.Build
 import android.os.IBinder
-import android.os.PowerManager
 import android.os.PowerManager
 import androidx.core.app.NotificationCompat
 import com.learnde.app.session.SessionManager
@@ -88,27 +73,6 @@ class GeminiLiveForegroundService : Service() {
         runCatching { if (wifiLock?.isHeld == true) wifiLock?.release() }; wifiLock = null
     }
 
-    private fun acquireLocks() {
-        if (wakeLock?.isHeld == true) return
-        val pm = getSystemService(Context.POWER_SERVICE) as PowerManager
-        wakeLock = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "learnde:session").apply {
-            setReferenceCounted(false)
-            acquire(2 * 60 * 60 * 1000L) // предохранитель 2 ч
-        }
-        val wm = applicationContext.getSystemService(Context.WIFI_SERVICE) as WifiManager
-        val mode = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q)
-            WifiManager.WIFI_MODE_FULL_LOW_LATENCY else WifiManager.WIFI_MODE_FULL_HIGH_PERF
-        wifiLock = wm.createWifiLock(mode, "learnde:session").apply {
-            setReferenceCounted(false)
-            acquire()
-        }
-    }
-
-    private fun releaseLocks() {
-        runCatching { if (wakeLock?.isHeld == true) wakeLock?.release() }; wakeLock = null
-        runCatching { if (wifiLock?.isHeld == true) wifiLock?.release() }; wifiLock = null
-    }
-
     override fun onCreate() {
         super.onCreate()
         audioManager = getSystemService(Context.AUDIO_SERVICE) as AudioManager
@@ -135,12 +99,6 @@ class GeminiLiveForegroundService : Service() {
                 stopForeground(STOP_FOREGROUND_REMOVE)
                 stopSelf()
             }
-            else -> {
-                releaseLocks()
-                stopForeground(STOP_FOREGROUND_REMOVE)
-                stopSelf()
-            }
-        }
             else -> {
                 releaseLocks()
                 stopForeground(STOP_FOREGROUND_REMOVE)
@@ -243,6 +201,12 @@ class GeminiLiveForegroundService : Service() {
         super.onTaskRemoved(rootIntent)
         // Свайп из «недавних» НЕ останавливает сессию — она живёт в фоне через FGS.
         // Остановка — кнопкой «Завершить сессию» в уведомлении (ACTION_USER_STOP).
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        releaseLocks()
+        releaseAudioFocus()
     }
 
     override fun onBind(intent: Intent?): IBinder? = null
