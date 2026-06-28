@@ -20,7 +20,6 @@ import com.learnde.app.data.settings.ThemeMode
 import com.learnde.app.presentation.GateViewModel
 import com.learnde.app.presentation.client.ClientScreen
 import com.learnde.app.presentation.navigation.Routes
-import com.learnde.app.presentation.onboarding.OnboardingScreen
 import com.learnde.app.ui.theme.GeminiVoiceTheme
 import dagger.hilt.android.AndroidEntryPoint
 
@@ -32,7 +31,6 @@ class MainActivity : ComponentActivity() {
         setContent {
             val navController = rememberNavController()
             val gate: GateViewModel = hiltViewModel()
-            val needsOnboarding by gate.needsOnboarding.collectAsStateWithLifecycle()
             val themeMode by gate.themeMode.collectAsStateWithLifecycle()
 
             val darkOverride: Boolean? = when (themeMode) {
@@ -46,31 +44,17 @@ class MainActivity : ComponentActivity() {
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background,
                 ) {
-                    if (needsOnboarding == null) {
-                        // Заглушка на время первой эмиссии — фон темы, без вспышки.
-                        Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background))
-                    } else {
-                        NavHost(
-                            navController = navController,
-                            startDestination = if (needsOnboarding == true) Routes.ONBOARDING else Routes.CLIENT,
-                        ) {
-                            composable(Routes.CLIENT) {
-                                ClientScreen(navController = navController)
-                            }
-                            composable(Routes.SETTINGS) {
-                                com.learnde.app.presentation.settings.SettingsScreen(
-                                    onBack = { navController.popBackStack() }
-                                )
-                            }
-                            composable(Routes.ONBOARDING) {
-                                OnboardingScreen(
-                                    onDone = {
-                                        navController.navigate(Routes.CLIENT) {
-                                            popUpTo(Routes.ONBOARDING) { inclusive = true }
-                                        }
-                                    }
-                                )
-                            }
+                    NavHost(
+                        navController = navController,
+                        startDestination = Routes.CLIENT,
+                    ) {
+                        composable(Routes.CLIENT) {
+                            ClientScreen(navController = navController)
+                        }
+                        composable(Routes.SETTINGS) {
+                            com.learnde.app.presentation.settings.SettingsScreen(
+                                onBack = { navController.popBackStack() }
+                            )
                         }
                     }
                 }
