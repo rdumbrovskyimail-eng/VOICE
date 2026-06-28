@@ -3,19 +3,14 @@ package com.learnde.app.presentation.client
 import android.Manifest
 import android.content.pm.PackageManager
 import android.net.Uri
-import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -26,13 +21,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.asImageBitmap
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -43,10 +35,8 @@ import com.learnde.app.presentation.navigation.Routes
 import com.learnde.app.session.ClientMode
 import com.learnde.app.ui.components.*
 import com.learnde.app.ui.theme.AppTheme
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
+import com.learnde.app.ui.theme.Radius
+import com.learnde.app.ui.theme.Space
 import java.text.SimpleDateFormat
 import java.util.Locale
 
@@ -61,7 +51,11 @@ fun ClientScreen(navController: NavController, viewModel: ClientViewModel = hilt
 
     var promptText by remember { mutableStateOf("") }
     var chatInput by remember { mutableStateOf("") }
+    
+    var promptAttachments by remember { mutableStateOf<List<Uri>>(emptyList()) }
     var chatAttachments by remember { mutableStateOf<List<Uri>>(emptyList()) }
+    
+    val promptPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { u -> promptAttachments = (promptAttachments + u).distinct().take(20) }
     val chatPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { u -> chatAttachments = (chatAttachments + u).distinct().take(20) }
 
     LaunchedEffect(state.activePrompt) { if (state.activePrompt.isNotEmpty() && promptText.isEmpty()) promptText = state.activePrompt }
@@ -78,57 +72,127 @@ fun ClientScreen(navController: NavController, viewModel: ClientViewModel = hilt
                 presence = presence, isLinkActive = state.isConnected || state.isConnecting, camMode = state.mode == ClientMode.CAM,
                 onToggleConnection = { if (hasRecord()) viewModel.toggleConnection() else connectLauncher.launch(arrayOf(Manifest.permission.RECORD_AUDIO)) },
                 onToggleCam = { viewModel.toggleCamMode() }, onSettings = { navController.navigate(Routes.SETTINGS) },
-                modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp)
+                modifier = Modifier.padding(horizontal = Space.lg, vertical = Space.sm)
             )
+
+            HorizontalDivider(color = pal.outline, thickness = 1.dp)
 
             // 2. ОШИБКИ
             if (state.error != null) {
-                Box(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp).border(1.dp, pal.outline, RoundedCornerShape(8.dp)).padding(8.dp)) {
-                    Text(state.error ?: "", color = pal.error, fontSize = 11.sp)
+                Box(Modifier.fillMaxWidth().padding(Space.lg).clip(RoundedCornerShape(Radius.md)).background(pal.errorBg).padding(Space.md)) {
+                    Text(state.error ?: "", color = pal.error, style = MaterialTheme.typography.bodyMedium)
                 }
             }
 
             // 3. ПРОМПТ
-            Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp)) {
-                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Column(modifier = Modifier.padding(horizontal = Space.lg, vertical = Space.md)) {
+                Row(
+                    Modifier.fillMaxWidth().clip(RoundedCornerShape(Radius.md)).background(pal.surface).padding(4.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    IconButton(onClick = { promptPicker.launch(arrayOf("*/*")) }, modifier = Modifier.size(36.dp).clip(RoundedCornerShape(Radius.sm))) {
+                        Icon(Icons.Filled.AttachFile, "Прикрепить", tint = pal.textSecondary, modifier = Modifier.size(18.dp))
+                    }
+                    
                     OutlinedTextField(
                         value = promptText, onValueChange = { promptText = it }, modifier = Modifier.weight(1f),
-                        placeholder = { Text("Системный промпт...", fontSize = 11.sp) }, textStyle = LocalTextStyle.current.copy(fontSize = 11.sp),
-                        shape = RoundedCornerShape(8.dp), singleLine = true,
-                        colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = pal.outline, unfocusedBorderColor = pal.outline)
+                        placeholder = { Text("Системный промпт...", color = pal.textDim, style = MaterialTheme.typography.bodyMedium) },
+                        textStyle = MaterialTheme.typography.bodyLarge,
+                        singleLine = true,
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = Color.Transparent, unfocusedBorderColor = Color.Transparent,
+                            focusedContainerColor = Color.Transparent, unfocusedContainerColor = Color.Transparent
+                        ),
+                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp)
                     )
-                    Spacer(Modifier.width(8.dp))
+                    
                     IconButton(
-                        onClick = { viewModel.applyPrompt(promptText.trim()) },
-                        modifier = Modifier.size(48.dp).clip(RoundedCornerShape(8.dp)).background(pal.surfaceElevated).border(1.dp, pal.outline, RoundedCornerShape(8.dp)),
-                    ) { Icon(Icons.Filled.Check, "Применить", tint = pal.textPrimary, modifier = Modifier.size(18.dp)) }
+                        onClick = { viewModel.applyPrompt(promptText.trim(), promptAttachments); promptAttachments = emptyList() },
+                        modifier = Modifier.size(36.dp).clip(RoundedCornerShape(Radius.sm)).background(pal.accentBlueBg)
+                    ) { Icon(Icons.Filled.Check, "Применить", tint = pal.accentBlue, modifier = Modifier.size(18.dp)) }
+                }
+                if (promptAttachments.isNotEmpty()) {
+                    AttachmentChips(promptAttachments) { promptAttachments = promptAttachments - it }
                 }
             }
 
-            // 4. ДАШБОРД
+            // 4. ДАШБОРД (Элегантная информационная карточка)
             if (state.dashboardText.isNotEmpty()) {
-                Box(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp).border(1.dp, pal.outline, RoundedCornerShape(8.dp)).padding(12.dp)) {
-                    Text(state.dashboardText, color = pal.textPrimary, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = Space.lg, vertical = Space.sm)
+                        .clip(RoundedCornerShape(Radius.lg))
+                        .background(pal.accentBlueBg)
+                        .padding(Space.md)
+                ) {
+                    Row(verticalAlignment = Alignment.Top) {
+                        Icon(
+                            Icons.Filled.Info, 
+                            contentDescription = "Информация", 
+                            tint = pal.accentBlue, 
+                            modifier = Modifier.size(20.dp).padding(top = 2.dp)
+                        )
+                        Spacer(Modifier.width(Space.sm))
+                        Text(
+                            text = state.dashboardText, 
+                            color = pal.textPrimary, 
+                            style = MaterialTheme.typography.bodyLarge, 
+                            modifier = Modifier.weight(1f)
+                        )
+                        Spacer(Modifier.width(Space.sm))
+                        IconButton(
+                            onClick = { viewModel.clearDashboard() },
+                            modifier = Modifier.size(24.dp)
+                        ) {
+                            Icon(Icons.Filled.Close, "Закрыть", tint = pal.accentBlue, modifier = Modifier.size(16.dp))
+                        }
+                    }
                 }
             }
 
-            // 5. КАМЕРА
+            // 5. КАМЕРА (С индикатором LIVE)
             if (cameraActive) {
-                CameraLayer(
-                    active = true, onFrame = { viewModel.sendCameraFrame(it) },
-                    modifier = Modifier.fillMaxWidth().height(180.dp).padding(horizontal = 12.dp, vertical = 4.dp).border(1.dp, pal.outline, RoundedCornerShape(8.dp)).clip(RoundedCornerShape(8.dp)),
-                )
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = Space.lg, vertical = Space.sm)
+                        .clip(RoundedCornerShape(Radius.lg))
+                        .background(pal.surfaceElevated)
+                ) {
+                    CameraLayer(
+                        active = true, onFrame = { viewModel.sendCameraFrame(it) },
+                        modifier = Modifier.fillMaxWidth().height(200.dp).clip(RoundedCornerShape(Radius.lg)),
+                    )
+                    // Индикатор LIVE
+                    Row(
+                        modifier = Modifier
+                            .align(Alignment.TopStart)
+                            .padding(Space.sm)
+                            .clip(RoundedCornerShape(Radius.pill))
+                            .background(Color.Black.copy(alpha = 0.6f))
+                            .padding(horizontal = 8.dp, vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Box(Modifier.size(6.dp).clip(CircleShape).background(pal.error))
+                        Spacer(Modifier.width(4.dp))
+                        Text("LIVE", color = Color.White, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
+                    }
+                }
             }
 
             // 6. ЧАТ
             Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
                 val messages = state.transcript
                 if (messages.isEmpty()) ChatEmptyState(modifier = Modifier.fillMaxSize())
-                else ChatList(messages = messages, prefs = chatPrefs, modifier = Modifier.fillMaxSize().padding(horizontal = 12.dp))
+                else ChatList(messages = messages, prefs = chatPrefs, modifier = Modifier.fillMaxSize().padding(horizontal = Space.lg))
             }
 
             // 7. ВВОД И ВЛОЖЕНИЯ
-            Column(modifier = Modifier.fillMaxWidth()) {
+            Column(modifier = Modifier.fillMaxWidth().background(pal.background)) {
+                // Элегантный разделитель, прижимающий чат
+                HorizontalDivider(color = pal.outline, thickness = 1.dp)
+                
                 if (chatAttachments.isNotEmpty()) {
                     AttachmentChips(chatAttachments) { chatAttachments = chatAttachments - it }
                 }
@@ -136,7 +200,7 @@ fun ClientScreen(navController: NavController, viewModel: ClientViewModel = hilt
                     value = chatInput, onValueChange = { chatInput = it }, onAttach = { chatPicker.launch(arrayOf("*/*")) },
                     onSend = { viewModel.sendText(chatInput, chatAttachments); chatInput = ""; chatAttachments = emptyList() },
                     isMicActive = state.isMicActive, onToggleMic = { if (hasRecord()) viewModel.toggleMic() else micLauncher.launch(Manifest.permission.RECORD_AUDIO) },
-                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)
+                    modifier = Modifier.padding(horizontal = Space.lg, vertical = Space.md)
                 )
             }
         }
@@ -148,14 +212,17 @@ private fun ChatList(messages: List<ConversationMessage>, prefs: ChatPrefs, modi
     val listState = rememberLazyListState()
     val timeFormatter = remember { SimpleDateFormat("HH:mm", Locale.getDefault()) }
     
-    LaunchedEffect(messages.size) { 
-        if (messages.isNotEmpty()) listState.scrollToItem(messages.lastIndex) 
+    // Плавный скролл при появлении новых сообщений ИЛИ при стриминге текста
+    LaunchedEffect(messages.size, messages.lastOrNull()?.text?.length) { 
+        if (messages.isNotEmpty()) {
+            listState.animateScrollToItem(messages.lastIndex) 
+        }
     }
 
     LazyColumn(
         modifier = modifier, state = listState,
-        verticalArrangement = Arrangement.spacedBy(2.dp), // Очень плотная компоновка
-        contentPadding = PaddingValues(vertical = 4.dp)
+        verticalArrangement = Arrangement.spacedBy(Space.sm),
+        contentPadding = PaddingValues(vertical = Space.md)
     ) {
         items(messages) { msg -> 
             MessageBubble(msg, prefs.fontScale, prefs.showRoleLabels, prefs.showTimestamps, timeFormatter) 
@@ -167,74 +234,71 @@ private fun ChatList(messages: List<ConversationMessage>, prefs: ChatPrefs, modi
 private fun AttachmentChips(uris: List<Uri>, onRemove: (Uri) -> Unit) {
     val ctx = LocalContext.current
     val pal = AppTheme.palette
-    LazyRow(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+    LazyRow(
+        Modifier.fillMaxWidth().padding(horizontal = Space.lg, vertical = Space.xs), 
+        horizontalArrangement = Arrangement.spacedBy(Space.sm)
+    ) {
         items(uris, key = { it.toString() }) { uri ->
-            val name = remember(uri) { fileLabel(ctx, uri) }
-            Row(
-                Modifier.clip(RoundedCornerShape(8.dp)).background(pal.surfaceElevated).border(1.dp, pal.outline, RoundedCornerShape(8.dp)).padding(start = 8.dp, end = 4.dp, top = 4.dp, bottom = 4.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Icon(Icons.Filled.InsertDriveFile, null, tint = pal.textPrimary, modifier = Modifier.size(12.dp))
-                Spacer(Modifier.width(4.dp))
-                Text(name, color = pal.textPrimary, fontSize = 10.sp, maxLines = 1, modifier = Modifier.widthIn(max = 100.dp))
-                Spacer(Modifier.width(2.dp))
-                IconButton(onClick = { onRemove(uri) }, modifier = Modifier.size(16.dp)) {
-                    Icon(Icons.Filled.Close, "Убрать", tint = pal.textSecondary, modifier = Modifier.size(10.dp))
-                }
-            }
+            AttachmentTile(ctx, uri, onRemove)
         }
     }
 }
 
-private fun fileLabel(ctx: android.content.Context, uri: Uri): String = runCatching {
-    ctx.contentResolver.query(uri, arrayOf(android.provider.OpenableColumns.DISPLAY_NAME), null, null, null)?.use {
-        if (it.moveToFirst()) it.getString(0) else null
-    }
-}.getOrNull() ?: uri.lastPathSegment ?: "файл"
-
-// --- Логика миниатюр (оставлена для корректной работы вложений) ---
-
 @Composable
-fun AttachmentThumbnails(uriStrings: List<String>) {
-    val ctx = LocalContext.current
-    Row(
-        Modifier.horizontalScroll(rememberScrollState()).padding(bottom = 4.dp),
-        horizontalArrangement = Arrangement.spacedBy(4.dp),
-    ) { uriStrings.forEach { AttachmentTile(ctx, it) } }
-}
-
-@Composable
-private fun AttachmentTile(ctx: android.content.Context, uriString: String) {
-    val uri = remember(uriString) { Uri.parse(uriString) }
+private fun AttachmentTile(ctx: android.content.Context, uri: Uri, onRemove: (Uri) -> Unit) {
     val density = LocalDensity.current
-    val reqPx = remember { with(density) { 48.dp.roundToPx() } * 2 }
-    var bmp by remember(uriString) { mutableStateOf<android.graphics.Bitmap?>(null) }
-    var tried by remember(uriString) { mutableStateOf(false) }
+    val reqPx = remember { with(density) { 56.dp.roundToPx() } * 2 }
+    var bmp by remember(uri) { mutableStateOf<android.graphics.Bitmap?>(null) }
+    var tried by remember(uri) { mutableStateOf(false) }
     val pal = AppTheme.palette
 
-    LaunchedEffect(uriString) {
+    LaunchedEffect(uri) {
         bmp = runCatching { decodeThumb(ctx, uri, reqPx) }.getOrNull()
         tried = true
     }
 
     Box(
-        Modifier.size(48.dp).clip(RoundedCornerShape(8.dp)).background(pal.surfaceElevated).border(1.dp, pal.outline, RoundedCornerShape(8.dp)),
+        Modifier
+            .size(56.dp)
+            .clip(RoundedCornerShape(Radius.md))
+            .background(pal.surfaceElevated),
         contentAlignment = Alignment.Center,
     ) {
         val b = bmp
         if (b != null) {
-            Image(b.asImageBitmap(), null, Modifier.fillMaxSize().clip(RoundedCornerShape(8.dp)), contentScale = ContentScale.Crop)
+            androidx.compose.foundation.Image(
+                bitmap = androidx.compose.ui.graphics.asImageBitmap(b), 
+                contentDescription = null, 
+                modifier = Modifier.fillMaxSize(), 
+                contentScale = androidx.compose.ui.layout.ContentScale.Crop
+            )
         } else {
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 Icon(
                     if (!tried) Icons.Filled.HourglassEmpty else Icons.Filled.InsertDriveFile,
-                    null, tint = pal.textSecondary, modifier = Modifier.size(16.dp),
+                    null, tint = pal.textSecondary, modifier = Modifier.size(18.dp),
                 )
                 if (tried) {
-                    val ext = remember(uriString) { fileExt(ctx, uri) }
-                    if (ext.isNotEmpty()) { Spacer(Modifier.height(2.dp)); Text(ext, color = pal.textSecondary, fontSize = 8.sp, maxLines = 1) }
+                    val ext = remember(uri) { fileExt(ctx, uri) }
+                    if (ext.isNotEmpty()) { 
+                        Spacer(Modifier.height(2.dp))
+                        Text(ext, color = pal.textSecondary, style = MaterialTheme.typography.labelSmall, maxLines = 1) 
+                    }
                 }
             }
+        }
+        
+        // Элегантная кнопка удаления поверх картинки
+        IconButton(
+            onClick = { onRemove(uri) },
+            modifier = Modifier
+                .align(Alignment.TopEnd)
+                .padding(4.dp)
+                .size(18.dp)
+                .clip(RoundedCornerShape(Radius.sm))
+                .background(Color.Black.copy(alpha = 0.5f))
+        ) {
+            Icon(Icons.Filled.Close, "Убрать", tint = Color.White, modifier = Modifier.size(10.dp))
         }
     }
 }
@@ -248,7 +312,7 @@ private object ThumbCache {
 }
 
 private suspend fun decodeThumb(ctx: android.content.Context, uri: Uri, reqPx: Int): android.graphics.Bitmap? =
-    withContext(Dispatchers.IO) {
+    kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
         val key = "$uri@$reqPx"
         ThumbCache.get(key)?.let { return@withContext it }
         val cr = ctx.contentResolver
