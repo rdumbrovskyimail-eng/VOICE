@@ -1,19 +1,10 @@
-// Путь: app/src/main/java/com/learnde/app/ui/components/AppHeader.kt
-//
-// Верхний тулбар на токенах. Слева — статус присутствия, справа — действия.
-// Фото-иконка убрана (камера управляется иконкой видео/CAM). Поведение прочего 1:1.
-
 package com.learnde.app.ui.components
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.border
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Stop
@@ -27,40 +18,27 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
 import com.learnde.app.ui.theme.AppTheme
-import com.learnde.app.ui.theme.Radius
 
 @Composable
 fun AppHeader(
-    presence: Presence,
-    isLinkActive: Boolean,          // isConnected || isConnecting → показываем Stop
-    camMode: Boolean,
-    onToggleConnection: () -> Unit,
-    onToggleCam: () -> Unit,
-    onSettings: () -> Unit,
+    presence: Presence, isLinkActive: Boolean, camMode: Boolean,
+    onToggleConnection: () -> Unit, onToggleCam: () -> Unit, onSettings: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val pal = AppTheme.palette
-    Row(
-        modifier.fillMaxWidth().height(52.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
+    Row(modifier.fillMaxWidth().height(48.dp), verticalAlignment = Alignment.CenterVertically) {
         StatusLabel(presence)
-        Spacer(Modifier.weight(1f))   // RowScope.weight — импортировать НЕ нужно
+        Spacer(Modifier.weight(1f))
 
-        // Главное действие — подключение. Заливка-акцент.
         IconButton(
             onClick = onToggleConnection,
-            modifier = Modifier.size(40.dp).clip(RoundedCornerShape(Radius.md))
-                .background(if (isLinkActive) pal.error.copy(alpha = 0.16f) else pal.accent),
+            modifier = Modifier.size(36.dp).clip(CircleShape).background(if (isLinkActive) pal.textPrimary else pal.surfaceElevated).border(1.dp, pal.outline, CircleShape),
         ) {
-            Icon(
-                if (isLinkActive) Icons.Filled.Stop else Icons.Filled.PlayArrow,
-                contentDescription = if (isLinkActive) "Отключить" else "Подключить",
-                tint = if (isLinkActive) pal.error else pal.onAccent,
-            )
+            Icon(if (isLinkActive) Icons.Filled.Stop else Icons.Filled.PlayArrow, "Подключить", tint = if (isLinkActive) pal.surface else pal.textPrimary, modifier = Modifier.size(18.dp))
         }
-
+        Spacer(Modifier.width(8.dp))
         ToolbarIcon(Icons.Filled.Videocam, "Камера", active = camMode, onClick = onToggleCam)
+        Spacer(Modifier.width(8.dp))
         ToolbarIcon(Icons.Filled.Settings, "Настройки", active = false, onClick = onSettings)
     }
 }
@@ -68,7 +46,8 @@ fun AppHeader(
 @Composable
 private fun ToolbarIcon(icon: ImageVector, label: String, active: Boolean, onClick: () -> Unit) {
     val pal = AppTheme.palette
-    IconButton(onClick = onClick, modifier = Modifier.size(40.dp)) {
-        Icon(icon, contentDescription = label, tint = if (active) pal.accent else pal.textSecondary)
-    }
+    IconButton(
+        onClick = onClick,
+        modifier = Modifier.size(36.dp).clip(CircleShape).background(if (active) pal.textPrimary else pal.surfaceElevated).border(1.dp, pal.outline, CircleShape)
+    ) { Icon(icon, label, tint = if (active) pal.surface else pal.textPrimary, modifier = Modifier.size(18.dp)) }
 }
