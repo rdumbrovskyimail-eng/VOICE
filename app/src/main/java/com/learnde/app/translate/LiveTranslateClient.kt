@@ -1,3 +1,18 @@
+// Путь: app/src/main/java/com/learnde/app/translate/LiveTranslateClient.kt
+//
+// Тонкий WebSocket-клиент строго под модель gemini-3.5-live-translate-preview.
+// 1:1 по официальной документации Gemini Live API → Live Translation:
+//   • эндпоинт — тот же v1beta BidiGenerateContent (ключ в query), что и у основного клиента;
+//   • setup: { model, generationConfig{ responseModalities:[AUDIO],
+//             inputAudioTranscription:{}, outputAudioTranscription:{},
+//             translationConfig:{ targetLanguageCode, echoTargetLanguage } } };
+//   • вход:  realtimeInput.audio = base64 PCM16 16кГц mono LE (mimeType "audio/pcm;rate=16000");
+//   • выход: serverContent.modelTurn.parts[].inlineData.data = base64 PCM16 24кГц.
+// НЕТ tools / systemInstruction / speechConfig / temperature — модель их не поддерживает.
+//
+// Один экземпляр = перевод В ОДИН целевой язык. Для двунаправленного RU<->DE
+// TranslatorManager поднимает ДВА таких клиента (target=de и target=ru).
+
 package com.learnde.app.translate
 
 import android.util.Base64
@@ -49,6 +64,7 @@ class LiveTranslateClient(
         .build()
 
     @Volatile private var webSocket: WebSocket? = null
+    @Volatile private var lastSetup: String = ""
 
     @Volatile var isReady: Boolean = false
         private set
@@ -67,7 +83,10 @@ class LiveTranslateClient(
         webSocket = httpClient.newWebSocket(request, object : WebSocketListener() {
             override fun onOpen(ws: WebSocket, response: okhttp3.Response) {
                 logger.d("Translate[$targetLanguageCode]: WS open HTTP ${response.code}")
-                ws.send(buildSetup())
+                val setup = buildSetup()
+                lastSetup = setup
+                logger.d("Translate[$targetLanguageCode]: SETUP → ${setup.length} chars")
+                ws.send(setup)
             }
 
             override fun onMessage(ws: WebSocket, text: String) {
@@ -85,6 +104,10 @@ class LiveTranslateClient(
             override fun onClosed(ws: WebSocket, code: Int, reason: String) {
                 isReady = false
                 logger.w("Translate[$targetLanguageCode]: closed $code '$reason'")
+                if (code == 1007 || code == 1008) {
+                    logger.e("Translate[$targetLanguageCode]: REJECTED setup ($code). reason='$reason'")
+                    logger.e("Translate[$targetLanguageCode]: setup was: $lastSetup")
+                }
                 _events.tryEmit(TranslateEvent.Closed(code, reason))
             }
 
@@ -98,19 +121,25 @@ class LiveTranslateClient(
         })
     }
 
-    /** Структура setup ровно как в официальном примере (translationConfig внутри generationConfig). */
+    /**
+     * Структура setup.
+     * ВАЖНО: inputAudioTranscription/outputAudioTranscription — поля ВЕРХНЕГО уровня setup
+     * (сиблинги generationConfig), как в рабочем основном клиенте этого приложения.
+     * В doc-примере они показаны внутри generationConfig — на реальном v1beta API это даёт
+     * close 1007 (SDK переносит их сам). translationConfig — внутри generationConfig (док).
+     */
     private fun buildSetup(): String = buildJsonObject {
         put("setup", buildJsonObject {
             put("model", MODEL)
             put("generationConfig", buildJsonObject {
                 put("responseModalities", buildJsonArray { add(JsonPrimitive("AUDIO")) })
-                put("inputAudioTranscription", buildJsonObject {})
-                put("outputAudioTranscription", buildJsonObject {})
                 put("translationConfig", buildJsonObject {
                     put("targetLanguageCode", targetLanguageCode)
                     put("echoTargetLanguage", echoTargetLanguage)
                 })
             })
+            put("inputAudioTranscription", buildJsonObject {})
+            put("outputAudioTranscription", buildJsonObject {})
         })
     }.toString()
 
