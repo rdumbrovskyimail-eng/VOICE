@@ -42,6 +42,9 @@ class MainActivity : ComponentActivity() {
                         composable(Routes.SETTINGS) {
                             com.learnde.app.presentation.settings.SettingsScreen(onBack = { navController.popBackStack() })
                         }
+                        composable(Routes.TRANSLATOR) {
+                            com.learnde.app.translate.TranslatorScreen(onBack = { navController.popBackStack() })
+                        }
                     }
                 }
             }
