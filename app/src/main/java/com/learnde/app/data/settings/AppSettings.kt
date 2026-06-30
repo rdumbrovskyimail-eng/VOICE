@@ -26,6 +26,7 @@ enum class ThemeMode { AUTO, LIGHT, DARK }
 data class AppSettings(
     // ─────────── Ключи / модель ───────────
     val apiKey: String = "",
+    val forvoApiKey: String = "",      // ← ДОБАВИТЬ. Ключ Forvo Pronunciation API.
     val model: String = "models/gemini-3.1-flash-live-preview",
 
     // ─────────── Генерация ───────────
