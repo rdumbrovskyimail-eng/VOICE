@@ -32,6 +32,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
 import com.learnde.app.domain.model.ConversationMessage
+import com.learnde.app.domain.model.Pronunciation
 import com.learnde.app.presentation.camera.CameraLayer
 import com.learnde.app.presentation.navigation.Routes
 import com.learnde.app.session.ClientMode
@@ -218,6 +219,9 @@ fun ClientScreen(navController: NavController, viewModel: ClientViewModel = hilt
                 if (chatAttachments.isNotEmpty()) {
                     AttachmentChips(chatAttachments) { chatAttachments = chatAttachments - it }
                 }
+                if (state.pronunciations.isNotEmpty()) {
+                    PronunciationChips(state.pronunciations) { viewModel.sendText(it.text, emptyList()) }
+                }
                 ChatInputBar(
                     value = chatInput, onValueChange = { chatInput = it }, onAttach = { chatPicker.launch(arrayOf("*/*")) },
                     onSend = { viewModel.sendText(chatInput, chatAttachments); chatInput = ""; chatAttachments = emptyList() },
@@ -262,6 +266,31 @@ private fun AttachmentChips(uris: List<Uri>, onRemove: (Uri) -> Unit) {
     ) {
         items(uris, key = { it.toString() }) { uri ->
             AttachmentTile(ctx, uri, onRemove)
+        }
+    }
+}
+
+@Composable
+private fun PronunciationChips(pronunciations: List<Pronunciation>, onClick: (Pronunciation) -> Unit) {
+    val pal = AppTheme.palette
+    LazyRow(
+        Modifier.fillMaxWidth().padding(horizontal = Space.lg, vertical = Space.xs),
+        horizontalArrangement = Arrangement.spacedBy(Space.sm)
+    ) {
+        items(pronunciations) { p ->
+            Surface(
+                onClick = { onClick(p) },
+                shape = RoundedCornerShape(Radius.pill),
+                color = pal.surfaceElevated,
+                border = androidx.compose.foundation.BorderStroke(1.dp, pal.outline)
+            ) {
+                Text(
+                    text = p.text,
+                    modifier = Modifier.padding(horizontal = Space.md, vertical = Space.sm),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = pal.textPrimary
+                )
+            }
         }
     }
 }
