@@ -1,6 +1,7 @@
 package com.learnde.app.ui.components
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -10,13 +11,16 @@ import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material.icons.filled.Videocam
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.learnde.app.ui.theme.AppTheme
 import com.learnde.app.ui.theme.Radius
 import com.learnde.app.ui.theme.Space
@@ -29,12 +33,23 @@ fun AppHeader(
     onToggleConnection: () -> Unit,
     onToggleCam: () -> Unit,
     onSettings: () -> Unit,
+    onTranslate: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val pal = AppTheme.palette
     Row(modifier = modifier.fillMaxWidth().height(56.dp), verticalAlignment = Alignment.CenterVertically) {
         StatusLabel(presence)
         Spacer(Modifier.weight(1f))
+
+        // Крупная «T» — открыть синхронный переводчик
+        Box(
+            Modifier.size(44.dp).clip(RoundedCornerShape(Radius.md)).background(pal.accentBlue)
+                .clickable(onClick = onTranslate),
+            contentAlignment = Alignment.Center
+        ) {
+            Text("T", color = Color.White, fontSize = 22.sp, fontWeight = FontWeight.Bold)
+        }
+        Spacer(Modifier.width(Space.sm))
 
         val (btnBg, btnIconTint) = if (isLinkActive) pal.errorBg to pal.error else pal.accentBlue to Color.White
 
