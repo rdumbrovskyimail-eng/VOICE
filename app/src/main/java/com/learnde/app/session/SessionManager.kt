@@ -60,6 +60,7 @@ class SessionManager @Inject constructor(
     private val settingsStore: DataStore<AppSettings>,
     private val attachmentProcessor: com.learnde.app.attach.AttachmentProcessor,
     private val logger: AppLogger,
+    private val toolRegistry: com.learnde.app.domain.ToolRegistry,
 ) {
 
     data class State(
@@ -340,19 +341,6 @@ class SessionManager @Inject constructor(
         val silenceMs = (if (settings.vadSilenceTimeoutMs > 0) settings.vadSilenceTimeoutMs
             else settings.vadSilenceDurationMs).coerceAtLeast(500)
 
-        // Описываем функцию для Gemini
-        val dashboardFunction = com.learnde.app.domain.model.FunctionDeclarationConfig(
-            name = "update_dashboard",
-            description = "Выводит важный текст на экран пользователя (в дашборд). Используй это для показа главных мыслей, перевода слов, формул или списков.",
-            parameters = mapOf(
-                "text" to com.learnde.app.domain.model.ParameterConfig(
-                    type = "STRING",
-                    description = "Текст, который нужно показать на экране."
-                )
-            ),
-            required = listOf("text")
-        )
-
         return SessionConfig(
             model = settings.model,
             responseModality = settings.responseModality,
@@ -382,7 +370,7 @@ class SessionManager @Inject constructor(
             compressionTriggerTokens = settings.compressionTriggerTokens,
             compressionTargetTokens = settings.compressionTargetTokens,
             enableGoogleSearch = settings.enableGoogleSearch,
-            functionDeclarations = listOf(dashboardFunction), // ИСПРАВЛЕНО: передаем список напрямую
+            functionDeclarations = toolRegistry.getDeclarations(),
             sendAudioStreamEnd = settings.sendAudioStreamEnd,
             seedHistoryInClientContent = false,
         )
@@ -390,10 +378,10 @@ class SessionManager @Inject constructor(
 
     private fun buildSystemInstruction(base: String, prompt: String): String {
         val modalityHint = "\n\nКАНАЛ ВВОДА: реплики, начинающиеся с «$TYPED_PREFIX», пользователь НАПЕЧАТАЛ вручную (как SMS); всё остальное он произнёс ГОЛОСОМ. Никогда не произноси и не повторяй сам тег «$TYPED_PREFIX» — это служебная пометка. На печатный ввод уместно отвечать чуть короче."
-        val dashboardHint = "\n\nУ тебя есть доступ к экрану пользователя. Если ты объясняешь сложное понятие, переводишь фразу, диктуешь номер или формулу — ОБЯЗАТЕЛЬНО вызывай функцию update_dashboard, чтобы вывести этот текст на экран для наглядности."
+        val toolHint = "\n\nУ тебя есть доступ к инструментам. Если ты объясняешь сложное понятие, переводишь фразу, диктуешь номер или формулу — ОБЯЗАТЕЛЬНО используй доступные функции для вывода информации на экран."
 
-        return if (prompt.isBlank()) base + modalityHint + dashboardHint
-        else base + modalityHint + dashboardHint + "\n\n[Промпт для текущей сессии]:\n" + prompt
+        return if (prompt.isBlank()) base + modalityHint + toolHint
+        else base + modalityHint + toolHint + "\n\n[Промпт для текущей сессии]:\n" + prompt
     }
 
     // ───────────────────────── События / orchestrator ─────────────────────────
@@ -475,21 +463,15 @@ class SessionManager @Inject constructor(
                         orchestrator.onModelActivity()
                         appScope.launch {
                             val responses = event.functionCalls.map { call ->
+                                val result = toolRegistry.execute(call.name, call.args)
                                 if (call.name == "update_dashboard") {
-                                    val textToShow = call.args["text"] ?: ""
-                                    _state.update { it.copy(dashboardText = textToShow) }
-                                    com.learnde.app.domain.ToolResponse(
-                                        name = call.name,
-                                        id = call.id,
-                                        result = """{"success": true}"""
-                                    )
-                                } else {
-                                    com.learnde.app.domain.ToolResponse(
-                                        name = call.name,
-                                        id = call.id,
-                                        result = """{"error": "Unknown function"}"""
-                                    )
+                                    _state.update { it.copy(dashboardText = call.args["text"] ?: "") }
                                 }
+                                com.learnde.app.domain.ToolResponse(
+                                    name = call.name,
+                                    id = call.id,
+                                    result = result
+                                )
                             }
                             liveClient.sendToolResponse(responses)
                         }
