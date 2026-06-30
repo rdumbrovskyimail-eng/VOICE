@@ -253,6 +253,10 @@ class SessionManager @Inject constructor(
         appScope.launch { stopInternal() }
     }
 
+    /** Полная СИНХРОННАЯ остановка сессии ассистента (мик + аудио-движок + foreground-сервис).
+     *  Нужна переводчику: он работает на том же общем AudioEngine. */
+    suspend fun shutdownBlocking() = connectionMutex.withLock { stopInternal() }
+
     // ───────────────────────── Жизненный цикл ─────────────────────────
 
     private suspend fun startInternal(prompt: String) {
