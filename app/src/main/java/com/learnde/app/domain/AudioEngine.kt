@@ -29,4 +29,8 @@ interface AudioEngine {
     fun setSpeakerRouting(forceSpeaker: Boolean)
 
     fun setAecEnabled(enabled: Boolean)
+
+    fun setFullDuplexMode(enabled: Boolean)
+
+    val echoCancellationActive: Boolean
 }
