@@ -1,3 +1,16 @@
+// Путь: app/src/main/java/com/learnde/app/translate/TranslatorManager.kt
+//
+// Владелец синхронного перевода. Переиспользует общий @Singleton AudioEngine (тот же,
+// что у ассистента → его аудио-тюнинг: VOICE_COMMUNICATION, AEC, маршрутизация на динамик).
+//
+// Двунаправленный RU<->DE = ДВА потока LiveTranslateClient:
+//   • target=de, echo=false  → RU→DE (немецкий вход здесь молчит);
+//   • target=ru, echo=false  → DE→RU (русский  вход здесь молчит).
+// Один и тот же звук мика шлётся в оба потока; озвучивает только «нужное» направление.
+//
+// Защита от само-перевода (feedback): пока проигрывается перевод, мик в потоки НЕ шлём
+// (тот же приём, что у ассистента — playbackAudibleUntilMs). Плюс аппаратный AEC.
+
 package com.learnde.app.translate
 
 import androidx.datastore.core.DataStore
@@ -69,6 +82,7 @@ class TranslatorManager @Inject constructor(
     private var decayJob: Job? = null
     private val collectJobs = mutableListOf<Job>()
 
+    // Последний распознанный источник по каждому потоку.
     @Volatile private var lastInputDe: String = ""
     @Volatile private var lastInputRu: String = ""
 
@@ -91,18 +105,21 @@ class TranslatorManager @Inject constructor(
                 lastInputDe = ""; lastInputRu = ""
                 _state.value = TranslatorUiState(status = TranslatorStatus.Connecting, bidirectional = bidirectional)
 
+                // Громкая связь + AEC (как у ассистента) — иначе перевод вернётся в мик.
                 audioEngine.setAecEnabled(true)
                 audioEngine.setFullDuplexMode(true)
                 audioEngine.setSpeakerRouting(true)
                 audioEngine.resetPlaybackClock()
                 runCatching { audioEngine.initPlayback() }
 
+                // RU → DE
                 LiveTranslateClient(LANG_DE, echoTargetLanguage = false, logger = logger).also {
                     clientDe = it
                     collectJobs += scope.launch { collectClient(it) }
                     it.connect(apiKey)
                 }
 
+                // DE → RU
                 if (bidirectional) {
                     LiveTranslateClient(LANG_RU, echoTargetLanguage = false, logger = logger).also {
                         clientRu = it
@@ -166,6 +183,7 @@ class TranslatorManager @Inject constructor(
                     if (client.target == LANG_DE) lastInputDe = ev.text else lastInputRu = ev.text
                 }
                 is TranslateEvent.OutputText -> {
+                    // Поток, который реально перевёл, и есть активное направление.
                     val dir = if (client.target == LANG_DE) Direction.RU_TO_DE else Direction.DE_TO_RU
                     val src = if (client.target == LANG_DE) lastInputDe else lastInputRu
                     _state.update {
@@ -184,9 +202,10 @@ class TranslatorManager @Inject constructor(
                 }
                 is TranslateEvent.Closed -> {
                     if (running && ev.code != 1000 && ev.code != 1001) {
+                        val extra = if (ev.reason.isNotBlank()) " ${ev.reason.take(160)}" else ""
                         _state.update {
                             it.copy(status = TranslatorStatus.Error,
-                                error = "Соединение прервано (${ev.code}). Нажмите микрофон, чтобы переподключиться.")
+                                error = "Соединение прервано (${ev.code}).$extra Нажмите микрофон, чтобы переподключиться.")
                         }
                     }
                 }
@@ -205,6 +224,7 @@ class TranslatorManager @Inject constructor(
                 if (cur > 0.001f) _amplitude.value = cur * AMP_DECAY
                 else if (cur != 0f) _amplitude.value = 0f
 
+                // Перевод доигран → снова «слушаем».
                 val now = System.currentTimeMillis()
                 if (_state.value.status == TranslatorStatus.Translating &&
                     now > audioEngine.playbackAudibleUntilMs + 300L
@@ -222,6 +242,7 @@ class TranslatorManager @Inject constructor(
 
     private fun visLevel(r: Float): Float = (r * VIS_GAIN).coerceIn(0f, 1f)
 
+    /** RMS из PCM16 little-endian → 0..1. */
     private fun rms(pcm: ByteArray): Float {
         if (pcm.size < 2) return 0f
         var sum = 0.0
