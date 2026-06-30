@@ -57,6 +57,7 @@ fun SettingsScreen(onBack: () -> Unit, viewModel: SettingsViewModel = hiltViewMo
         ) {
             SettingsSection("Подключение") {
                 SettingsTextField("API Ключ", settings.apiKey, viewModel::updateApiKey, "AIzaSy...")
+                SettingsTextField("Forvo API key", settings.forvoApiKey, viewModel::updateForvoApiKey, "...")
                 SettingsTextField("Модель", settings.model, viewModel::updateModel, "models/gemini-3.1-flash-live-preview")
             }
             
