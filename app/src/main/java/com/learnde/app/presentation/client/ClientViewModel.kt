@@ -56,6 +56,9 @@ class ClientViewModel @Inject constructor(
     fun sendText(text: String, attachments: List<android.net.Uri> = emptyList()) = session.sendText(text, attachments)
     fun toggleMic() = session.toggleMic()
     fun clearDashboard() = session.clearDashboard()
+    fun playPronunciation(item: com.learnde.app.domain.model.PronunciationItem) =
+        session.playPronunciation(item)
+    fun clearPronunciations() = session.clearPronunciations()
     fun clearError() = session.clearError()
     fun retry() = session.retry()
 
