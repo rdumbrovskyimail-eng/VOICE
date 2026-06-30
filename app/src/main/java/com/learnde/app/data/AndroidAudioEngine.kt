@@ -15,9 +15,14 @@ import android.media.AudioFormat
 import android.media.AudioRecord
 import android.media.AudioTrack
 import android.media.MediaRecorder
+import android.content.Context
+import android.media.AudioDeviceInfo
+import android.media.AudioManager
 import android.media.audiofx.AcousticEchoCanceler
 import android.media.audiofx.NoiseSuppressor
+import android.os.Build
 import com.learnde.app.domain.AudioEngine
+import dagger.hilt.android.qualifiers.ApplicationContext
 import com.learnde.app.domain.model.SessionConfig
 import javax.inject.Inject
 import com.learnde.app.util.AppLogger
@@ -44,6 +49,7 @@ import java.nio.ByteBuffer
 import java.nio.ByteOrder
 
 class AndroidAudioEngine @Inject constructor(
+    @ApplicationContext private val context: Context,
     private val logger: AppLogger
 ) : AudioEngine {
 
@@ -56,6 +62,13 @@ class AndroidAudioEngine @Inject constructor(
     @Volatile private var micGain: Float = 1.4f
     @Volatile private var forceSpeakerOutput: Boolean = true
     @Volatile private var aecEnabled: Boolean = true   // управляется настройкой useAec
+
+    @Volatile private var fullDuplexMode: Boolean = false
+    @Volatile private var usingCommRoute: Boolean = false
+    @Volatile private var savedVoiceCallVolume: Int = -1
+
+    private val audioManager: AudioManager?
+        get() = context.getSystemService(Context.AUDIO_SERVICE) as? AudioManager
 
     // ═══ FLOWS ═══
     private val _micOutput = MutableSharedFlow<ByteArray>(
@@ -86,7 +99,7 @@ class AndroidAudioEngine @Inject constructor(
     private val captureLifecycleMutex = Mutex()
 
     private var playbackChannel: Channel<ByteArray> =
-        Channel(500, BufferOverflow.DROP_OLDEST)
+        Channel(Channel.UNLIMITED)
 
     @Volatile private var isFirstBatch = true
     @Volatile private var awaitingDrain = false
@@ -127,6 +140,59 @@ class AndroidAudioEngine @Inject constructor(
 
     override fun setAecEnabled(enabled: Boolean) {
         aecEnabled = enabled
+    }
+
+    override fun setFullDuplexMode(enabled: Boolean) { fullDuplexMode = enabled }
+
+    override val echoCancellationActive: Boolean get() = usingCommRoute
+
+    private fun isHeadsetConnected(): Boolean {
+        val am = audioManager ?: return false
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) return false
+        return am.getDevices(AudioManager.GET_DEVICES_OUTPUTS).any { d ->
+            d.type == AudioDeviceInfo.TYPE_WIRED_HEADPHONES ||
+            d.type == AudioDeviceInfo.TYPE_WIRED_HEADSET ||
+            d.type == AudioDeviceInfo.TYPE_USB_HEADSET ||
+            d.type == AudioDeviceInfo.TYPE_BLUETOOTH_A2DP ||
+            d.type == AudioDeviceInfo.TYPE_BLUETOOTH_SCO ||
+            (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S &&
+                d.type == AudioDeviceInfo.TYPE_BLE_HEADSET)
+        }
+    }
+
+    private fun enterCommunicationRoute() {
+        val am = audioManager ?: return
+        runCatching { am.mode = AudioManager.MODE_IN_COMMUNICATION }
+        runCatching {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                am.availableCommunicationDevices
+                    .firstOrNull { it.type == AudioDeviceInfo.TYPE_BUILTIN_SPEAKER }
+                    ?.let { am.setCommunicationDevice(it) }
+            } else {
+                @Suppress("DEPRECATION") am.isSpeakerphoneOn = true
+            }
+        }
+        runCatching {
+            if (savedVoiceCallVolume < 0)
+                savedVoiceCallVolume = am.getStreamVolume(AudioManager.STREAM_VOICE_CALL)
+            val max = am.getStreamMaxVolume(AudioManager.STREAM_VOICE_CALL)
+            am.setStreamVolume(AudioManager.STREAM_VOICE_CALL, max, 0)
+        }
+        logger.d("Audio route: COMMUNICATION + speaker (AEC reference active)")
+    }
+
+    private fun restoreAudioRoute() {
+        val am = audioManager ?: return
+        usingCommRoute = false
+        runCatching {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) am.clearCommunicationDevice()
+            else { @Suppress("DEPRECATION") am.isSpeakerphoneOn = false }
+        }
+        if (savedVoiceCallVolume >= 0) {
+            runCatching { am.setStreamVolume(AudioManager.STREAM_VOICE_CALL, savedVoiceCallVolume, 0) }
+            savedVoiceCallVolume = -1
+        }
+        runCatching { am.mode = AudioManager.MODE_NORMAL }
     }
 
     @Suppress("MissingPermission")
@@ -288,7 +354,7 @@ class AndroidAudioEngine @Inject constructor(
         }
         if (!engineScope.isActive) engineScope = newEngineScope()
         if (playbackChannel.isClosedForSend) {
-            playbackChannel = Channel(500, BufferOverflow.DROP_OLDEST)
+            playbackChannel = Channel(Channel.UNLIMITED)
         }
 
         val sampleRate = SessionConfig.OUTPUT_SAMPLE_RATE
@@ -300,15 +366,23 @@ class AndroidAudioEngine @Inject constructor(
             return
         }
 
+        val useCommRoute = fullDuplexMode && !isHeadsetConnected()
+        usingCommRoute = useCommRoute
+
         val track = try {
+            val attrs = if (useCommRoute) {
+                enterCommunicationRoute()
+                AudioAttributes.Builder()
+                    .setUsage(AudioAttributes.USAGE_VOICE_COMMUNICATION)
+                    .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH).build()
+            } else {
+                runCatching { audioManager?.mode = AudioManager.MODE_NORMAL }
+                AudioAttributes.Builder()
+                    .setUsage(AudioAttributes.USAGE_MEDIA)
+                    .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH).build()
+            }
             AudioTrack.Builder()
-                .setAudioAttributes(
-                    AudioAttributes.Builder()
-                        // ★ ИСПРАВЛЕНИЕ ТИХОГО ЗВУКА: USAGE_MEDIA вместо USAGE_VOICE_COMMUNICATION.
-                        // Медиа-поток громкий по умолчанию и маршрутизируется на динамик/наушники.
-                        .setUsage(AudioAttributes.USAGE_MEDIA)
-                        .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH).build()
-                )
+                .setAudioAttributes(attrs)
                 .setAudioFormat(
                     AudioFormat.Builder()
                         .setEncoding(AudioFormat.ENCODING_PCM_16BIT)
@@ -319,6 +393,7 @@ class AndroidAudioEngine @Inject constructor(
                 .setBufferSizeInBytes(minBuf * 2).build()
         } catch (e: Exception) {
             logger.e("AudioTrack build failed: ${e.message}", e)
+            restoreAudioRoute()
             return
         }
 
@@ -326,7 +401,7 @@ class AndroidAudioEngine @Inject constructor(
         runCatching { track.setVolume(playbackGain) }
         track.play()
         isPlaying = true
-        logger.d("Speaker ready (rate=$sampleRate, usage=MEDIA, gain=$playbackGain)")
+        logger.d("Speaker ready (rate=$sampleRate, commRoute=$useCommRoute, gain=$playbackGain)")
         val myGen = ++playbackLoopGen
         playbackJob = engineScope.launch {
             try {
@@ -426,6 +501,7 @@ class AndroidAudioEngine @Inject constructor(
         runCatching {
             withTimeoutOrNull(800L) { engineScope.coroutineContext[Job]?.cancelAndJoin() }
         }
+        restoreAudioRoute()
         logger.d("Engine released")
     }
 }
