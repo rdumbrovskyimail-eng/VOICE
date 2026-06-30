@@ -65,7 +65,7 @@ class GeminiLiveClient(
 
     private val _events = MutableSharedFlow<GeminiEvent>(
         replay = 0,
-        extraBufferCapacity = 128,
+        extraBufferCapacity = 256,
         onBufferOverflow = BufferOverflow.DROP_OLDEST
     )
     override val events: Flow<GeminiEvent> = _events.asSharedFlow()
