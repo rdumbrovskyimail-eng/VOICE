@@ -103,6 +103,8 @@ class SessionManager @Inject constructor(
     @Volatile private var sendStreamEndOnStop: Boolean = true
 
     @Volatile private var bargeInEnabled: Boolean = false
+    @Volatile private var aiTurnStartedAt: Long = 0L
+    private val aecConvergeMs: Long = 150L
     private val connectionMutex = Mutex()
 
     init {
@@ -285,6 +287,7 @@ class SessionManager @Inject constructor(
         )
         sendStreamEndOnStop = settings.sendAudioStreamEnd
         bargeInEnabled = settings.bargeInEnabled
+        audioEngine.setFullDuplexMode(settings.bargeInEnabled)
 
         audioEngine.initPlayback()
         startService()
@@ -362,7 +365,8 @@ class SessionManager @Inject constructor(
             vadEndSensitivity = settings.vadEndSensitivity,
             vadPrefixPaddingMs = settings.vadPrefixPaddingMs,
             vadSilenceDurationMs = silenceMs,
-            activityHandling = settings.activityHandling,
+            activityHandling = if (settings.bargeInEnabled) "START_OF_ACTIVITY_INTERRUPTS"
+                               else "NO_INTERRUPTION",
             systemInstruction = when (_state.value.mode) {
                 ClientMode.CAM -> CAM_SYSTEM_PROMPT
                 else -> buildSystemInstruction(settings.systemInstruction, prompt)
@@ -431,18 +435,21 @@ class SessionManager @Inject constructor(
                         _state.update { it.copy(error = event.message) }
 
                     is GeminiEvent.AudioChunk -> {
+                        if (!_state.value.isAiSpeaking) aiTurnStartedAt = System.currentTimeMillis()
                         orchestrator.onModelActivity()
                         _state.update { it.copy(isAiSpeaking = true) }
                         audioEngine.enqueuePlayback(event.pcmData)
                     }
 
                     is GeminiEvent.TurnComplete -> {
+                        aiTurnStartedAt = 0L
                         streamingRole = null
                         _state.update { it.copy(isAiSpeaking = false) }
                         audioEngine.onTurnComplete()
                     }
 
                     is GeminiEvent.Interrupted -> {
+                        aiTurnStartedAt = 0L
                         streamingRole = null
                         _state.update { it.copy(isAiSpeaking = false) }
                         audioEngine.flushPlayback()
@@ -525,16 +532,29 @@ class SessionManager @Inject constructor(
             audioEngine.resetPlaybackClock()
             var wasAiPlaying = false
             audioEngine.micOutput.collect { chunk ->
-                val isAiPlaying = System.currentTimeMillis() <= audioEngine.playbackAudibleUntilMs + 400L
-                if (!bargeInEnabled && isAiPlaying) {
-                    if (!wasAiPlaying) {
-                        liveClient.sendAudioStreamEnd()
-                        wasAiPlaying = true
+                val now = System.currentTimeMillis()
+                val isAiPlaying = now <= audioEngine.playbackAudibleUntilMs + 400L
+                when {
+                    bargeInEnabled -> {
+                        val needGuard = audioEngine.echoCancellationActive
+                        val converging = needGuard && aiTurnStartedAt > 0L &&
+                                         (now - aiTurnStartedAt) < aecConvergeMs
+                        if (!converging) {
+                            liveClient.sendAudio(chunk)
+                            if (!_state.value.isAiSpeaking) pushLevel(visLevel(rms(chunk)))
+                        }
                     }
-                } else {
-                    wasAiPlaying = false
-                    liveClient.sendAudio(chunk)
-                    if (!_state.value.isAiSpeaking) pushLevel(visLevel(rms(chunk)))
+                    isAiPlaying -> {
+                        if (!wasAiPlaying) {
+                            liveClient.sendAudioStreamEnd()
+                            wasAiPlaying = true
+                        }
+                    }
+                    else -> {
+                        wasAiPlaying = false
+                        liveClient.sendAudio(chunk)
+                        if (!_state.value.isAiSpeaking) pushLevel(visLevel(rms(chunk)))
+                    }
                 }
             }
         }
