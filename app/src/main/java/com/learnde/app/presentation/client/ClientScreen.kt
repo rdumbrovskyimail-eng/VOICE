@@ -75,6 +75,7 @@ fun ClientScreen(navController: NavController, viewModel: ClientViewModel = hilt
                 presence = presence, isLinkActive = state.isConnected || state.isConnecting, camMode = state.cameraOn,
                 onToggleConnection = { if (hasRecord()) viewModel.toggleConnection() else connectLauncher.launch(arrayOf(Manifest.permission.RECORD_AUDIO)) },
                 onToggleCam = { viewModel.toggleCamera() }, onSettings = { navController.navigate(Routes.SETTINGS) },
+                onTranslate = { navController.navigate(Routes.TRANSLATOR) },
                 modifier = Modifier.padding(horizontal = Space.lg, vertical = Space.sm)
             )
 
