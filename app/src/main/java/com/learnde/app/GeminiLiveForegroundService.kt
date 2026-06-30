@@ -131,7 +131,6 @@ class GeminiLiveForegroundService : Service() {
     // Фокус под МЕДИА-воспроизведение: громкий поток, режим NORMAL.
     private fun requestMediaAudioFocus() {
         val am = audioManager ?: return
-        am.mode = AudioManager.MODE_NORMAL
 
         val attrs = AudioAttributes.Builder()
             .setUsage(AudioAttributes.USAGE_MEDIA)
@@ -152,7 +151,6 @@ class GeminiLiveForegroundService : Service() {
         val am = audioManager ?: return
         focusRequest?.let { runCatching { am.abandonAudioFocusRequest(it) } }
         focusRequest = null
-        am.mode = AudioManager.MODE_NORMAL
     }
 
     private fun buildNotification(): Notification {
