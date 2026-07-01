@@ -5,10 +5,7 @@ import android.media.MediaPlayer
 import javax.inject.Inject
 import javax.inject.Singleton
 
-/**
- * Проигрывает короткие mp3 произношений по URL. Один экземпляр на приложение:
- * новый тап останавливает предыдущее воспроизведение.
- */
+/** Проигрывает короткие mp3 по URL. Новый тап останавливает предыдущее воспроизведение. */
 @Singleton
 class PronunciationPlayer @Inject constructor(
     private val logger: AppLogger,
