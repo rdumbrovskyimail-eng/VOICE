@@ -584,10 +584,21 @@ class SessionManager @Inject constructor(
             _state.update { it.copy(isMicActive = true, error = null) }
             audioEngine.resetPlaybackClock()
             var wasAiPlaying = false
+            
             audioEngine.micOutput.collect { chunk ->
                 val now = System.currentTimeMillis()
                 val isAiPlaying = now <= audioEngine.playbackAudibleUntilMs + 400L
+                // Проверяем, играет ли сейчас плеер Forvo
+                val isForvoPlaying = pronunciationPlayer.isPlaying.value
+
                 when {
+                    isForvoPlaying -> {
+                        // ЖЕСТКИЙ МЬЮТ: Если играет Forvo, мы НЕ отправляем звук с микрофона Гемини.
+                        if (!wasAiPlaying) {
+                            liveClient.sendAudioStreamEnd()
+                            wasAiPlaying = true
+                        }
+                    }
                     bargeInEnabled -> {
                         val needGuard = audioEngine.echoCancellationActive
                         val converging = needGuard && aiTurnStartedAt > 0L &&
@@ -596,6 +607,7 @@ class SessionManager @Inject constructor(
                             liveClient.sendAudio(chunk)
                             if (!_state.value.isAiSpeaking) pushLevel(visLevel(rms(chunk)))
                         }
+                        wasAiPlaying = false
                     }
                     isAiPlaying -> {
                         if (!wasAiPlaying) {
