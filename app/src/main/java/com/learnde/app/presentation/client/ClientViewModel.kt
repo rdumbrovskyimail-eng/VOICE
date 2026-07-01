@@ -58,7 +58,7 @@ class ClientViewModel @Inject constructor(
     fun clearDashboard() = session.clearDashboard()
     fun clearError() = session.clearError()
     fun retry() = session.retry()
-    fun playPronunciation(text: String) = session.playPronunciation(text)
+    fun playPronunciation(item: com.learnde.app.domain.model.PronunciationItem) = session.playPronunciation(item)
     fun clearPronunciations() = session.clearPronunciations()
 
     fun toggleCamera() = session.setCameraOn(!state.value.cameraOn)
