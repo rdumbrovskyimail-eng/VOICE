@@ -19,9 +19,8 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 /**
- * Доступ к Forvo Pronunciation API.
- * Возвращает URL mp3 эталонного (top-rated) произношения слова.
- * Ключ берётся из AppSettings.forvoApiKey; пустой ключ → null (без падений).
+ * Forvo Pronunciation API: слово → URL mp3 эталонного (top-rated) произношения.
+ * Ключ берётся из AppSettings.forvoApiKey. Пустой ключ / не найдено / сбой → null (без падений).
  */
 @Singleton
 class ForvoRepository @Inject constructor(
@@ -35,7 +34,7 @@ class ForvoRepository @Inject constructor(
 
     private val json = Json { ignoreUnknownKeys = true }
 
-    // Кэш «lang:слово → URL»: бережём лимит плана, слова часто повторяются.
+    // Кэш «lang:слово → URL»: бережём лимит плана, слова повторяются.
     private val cache = ConcurrentHashMap<String, String>()
 
     suspend fun standardPronunciationUrl(word: String, language: String = "de"): String? =
@@ -48,7 +47,7 @@ class ForvoRepository @Inject constructor(
             val cacheKey = "$language:${word.lowercase()}"
             cache[cacheKey]?.let { return@withContext it }
 
-            // Параметры Forvo идут в ПУТИ, поэтому кодируем слово как path-сегмент:
+            // Параметры Forvo идут в ПУТИ. Кодируем слово как path-сегмент:
             // умляуты → %C3%xx, пробел → %20 (URLEncoder даёт '+', заменяем).
             val encoded = URLEncoder.encode(word, "UTF-8").replace("+", "%20")
             val url = "$HOST/key/$key/format/json/action/standard-pronunciation" +
