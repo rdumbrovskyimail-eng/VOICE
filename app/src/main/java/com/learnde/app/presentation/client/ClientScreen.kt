@@ -32,6 +32,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
 import com.learnde.app.domain.model.ConversationMessage
+import com.learnde.app.domain.model.Pronunciation
 import com.learnde.app.presentation.camera.CameraLayer
 import com.learnde.app.presentation.navigation.Routes
 import com.learnde.app.session.ClientMode
@@ -247,7 +248,12 @@ private fun ChatList(messages: List<ConversationMessage>, prefs: ChatPrefs, modi
         contentPadding = PaddingValues(vertical = Space.md)
     ) {
         items(messages) { msg -> 
-            MessageBubble(msg, prefs.fontScale, prefs.showRoleLabels, prefs.showTimestamps, timeFormatter) 
+            Column(verticalArrangement = Arrangement.spacedBy(Space.xs)) {
+                MessageBubble(msg, prefs.fontScale, prefs.showRoleLabels, prefs.showTimestamps, timeFormatter)
+                if (msg.pronunciations.isNotEmpty()) {
+                    PronunciationChips(msg.pronunciations)
+                }
+            }
         }
     }
 }
@@ -262,6 +268,30 @@ private fun AttachmentChips(uris: List<Uri>, onRemove: (Uri) -> Unit) {
     ) {
         items(uris, key = { it.toString() }) { uri ->
             AttachmentTile(ctx, uri, onRemove)
+        }
+    }
+}
+
+@Composable
+private fun PronunciationChips(pronunciations: List<Pronunciation>) {
+    val pal = AppTheme.palette
+    LazyRow(
+        horizontalArrangement = Arrangement.spacedBy(Space.xs),
+        contentPadding = PaddingValues(horizontal = Space.lg)
+    ) {
+        items(pronunciations) { p ->
+            Surface(
+                shape = RoundedCornerShape(Radius.pill),
+                color = pal.surfaceElevated,
+                border = androidx.compose.foundation.BorderStroke(1.dp, pal.outline)
+            ) {
+                Text(
+                    text = "${p.word}: ${p.ipa}",
+                    modifier = Modifier.padding(horizontal = Space.sm, vertical = 4.dp),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = pal.textSecondary
+                )
+            }
         }
     }
 }
