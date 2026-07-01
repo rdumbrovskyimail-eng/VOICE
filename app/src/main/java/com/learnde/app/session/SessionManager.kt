@@ -27,7 +27,7 @@ import com.learnde.app.domain.LiveClient
 import com.learnde.app.domain.model.ConversationMessage
 import com.learnde.app.domain.model.GeminiEvent
 import com.learnde.app.domain.model.LatencyProfile
-import com.learnde.app.domain.model.PronunciationResult
+import com.learnde.app.domain.model.PronunciationItem
 import com.learnde.app.domain.model.SessionConfig
 import com.learnde.app.learn.core.LearnScope
 import com.learnde.app.util.AppLogger
@@ -48,6 +48,9 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.jsonArray
+import kotlinx.serialization.json.jsonPrimitive
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.math.sqrt
@@ -81,7 +84,7 @@ class SessionManager @Inject constructor(
         val cameraOn: Boolean = false,
         val totalTokens: Int = 0,
         val searchUsed: Boolean = false,
-        val pronunciations: List<PronunciationResult> = emptyList(),
+        val pronunciations: List<PronunciationItem> = emptyList(),
     )
 
     companion object {
@@ -245,6 +248,48 @@ class SessionManager @Inject constructor(
     /** Скрыть/очистить табло (крестик в карточке дашборда). */
     fun clearDashboard() {
         _state.update { it.copy(dashboardText = "") }
+    }
+
+    /** Тап по чипу произношения — проиграть mp3 (Forvo). */
+    fun playPronunciation(item: PronunciationItem) {
+        val url = item.audioUrl ?: return
+        pronunciationPlayer.play(url)
+    }
+
+    /** Скрыть ряд произношения. */
+    fun clearPronunciations() {
+        pronunciationPlayer.stop()
+        _state.update { it.copy(pronunciations = emptyList()) }
+    }
+
+    // Мгновенно показываем слова, аудио тянем параллельно и обновляем чипы по готовности.
+    private fun handleShowPronunciations(rawWords: String?) {
+        val words = parseWordsArg(rawWords)
+        _state.update { it.copy(pronunciations = words.map { w -> PronunciationItem(w) }) }
+        words.forEach { w ->
+            appScope.launch {
+                val url = forvoRepository.standardPronunciationUrl(w)
+                _state.update { st ->
+                    st.copy(pronunciations = st.pronunciations.map { item ->
+                        if (item.word == w) item.copy(
+                            audioUrl = url,
+                            status = if (url != null) PronunciationItem.Status.Ready
+                                     else PronunciationItem.Status.Error
+                        ) else item
+                    })
+                }
+            }
+        }
+    }
+
+    // args["words"] приходит как JSON-строка: ["der Hund","die Katze"]
+    private fun parseWordsArg(raw: String?): List<String> {
+        if (raw.isNullOrBlank()) return emptyList()
+        return runCatching {
+            Json.parseToJsonElement(raw).jsonArray.map { it.jsonPrimitive.content }
+        }.getOrElse {
+            raw.split(",").map { it.trim() }
+        }.map { it.trim() }.filter { it.isNotEmpty() }.distinct().take(20)
     }
 
     /** Сбросить ошибку после показа в Snackbar. */
@@ -468,13 +513,12 @@ class SessionManager @Inject constructor(
                         orchestrator.onModelActivity()
                         appScope.launch {
                             val responses = event.functionCalls.map { call ->
-                                val result = if (call.name == "pronunciation_check") {
-                                    handlePronunciationCheck(call.args)
-                                } else {
-                                    toolRegistry.execute(call.name, call.args)
-                                }
-                                if (call.name == "update_dashboard") {
-                                    _state.update { it.copy(dashboardText = call.args["text"] ?: "") }
+                                val result = toolRegistry.execute(call.name, call.args)
+                                when (call.name) {
+                                    "update_dashboard" ->
+                                        _state.update { it.copy(dashboardText = call.args["text"] ?: "") }
+                                    "show_pronunciations" ->
+                                        handleShowPronunciations(call.args["words"])
                                 }
                                 com.learnde.app.domain.ToolResponse(
                                     name = call.name,
