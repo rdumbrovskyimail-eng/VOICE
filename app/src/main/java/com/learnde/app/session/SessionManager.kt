@@ -27,6 +27,7 @@ import com.learnde.app.domain.LiveClient
 import com.learnde.app.domain.model.ConversationMessage
 import com.learnde.app.domain.model.GeminiEvent
 import com.learnde.app.domain.model.LatencyProfile
+import com.learnde.app.domain.model.PronunciationResult
 import com.learnde.app.domain.model.SessionConfig
 import com.learnde.app.learn.core.LearnScope
 import com.learnde.app.util.AppLogger
@@ -59,6 +60,7 @@ class SessionManager @Inject constructor(
     private val orchestrator: ConnectionOrchestrator,
     private val settingsStore: DataStore<AppSettings>,
     private val attachmentProcessor: com.learnde.app.attach.AttachmentProcessor,
+    private val pronunciationManager: com.learnde.app.domain.PronunciationManager,
     private val logger: AppLogger,
     private val toolRegistry: com.learnde.app.domain.ToolRegistry,
 ) {
@@ -78,6 +80,7 @@ class SessionManager @Inject constructor(
         val cameraOn: Boolean = false,
         val totalTokens: Int = 0,
         val searchUsed: Boolean = false,
+        val pronunciations: List<PronunciationResult> = emptyList(),
     )
 
     companion object {
@@ -326,7 +329,8 @@ class SessionManager @Inject constructor(
                 isConnecting = false,
                 isMicActive = false,
                 isAiSpeaking = false,
-                transcript = emptyList()
+                transcript = emptyList(),
+                pronunciations = emptyList()
             )
         }
     }
@@ -463,7 +467,11 @@ class SessionManager @Inject constructor(
                         orchestrator.onModelActivity()
                         appScope.launch {
                             val responses = event.functionCalls.map { call ->
-                                val result = toolRegistry.execute(call.name, call.args)
+                                val result = if (call.name == "pronunciation_check") {
+                                    handlePronunciationCheck(call.args)
+                                } else {
+                                    toolRegistry.execute(call.name, call.args)
+                                }
                                 if (call.name == "update_dashboard") {
                                     _state.update { it.copy(dashboardText = call.args["text"] ?: "") }
                                 }
@@ -501,6 +509,13 @@ class SessionManager @Inject constructor(
 
     private fun addFinalMessage(msg: ConversationMessage) {
         _state.update { st -> st.copy(transcript = (st.transcript + msg).takeLast(MAX_MSGS)) }
+    }
+
+    private suspend fun handlePronunciationCheck(args: Map<String, String>): String {
+        val target = args["target_phrase"] ?: return "Error: missing target_phrase"
+        val result = pronunciationManager.check(target)
+        _state.update { it.copy(pronunciations = it.pronunciations + result) }
+        return "Pronunciation check completed: ${result.score}%"
     }
 
     // ───────────────────────── Микрофон ─────────────────────────
