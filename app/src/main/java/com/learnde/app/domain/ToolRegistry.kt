@@ -26,11 +26,23 @@ class ToolRegistry @Inject constructor() {
                 )
             ),
             required = listOf("text")
+        ),
+        FunctionDeclarationConfig(
+            name = "show_pronunciations",
+            description = "Показывает транскрипцию слова или фразы.",
+            parameters = mapOf(
+                "word" to ParameterConfig(
+                    type = "STRING",
+                    description = "Слово или фраза для отображения транскрипции."
+                )
+            ),
+            required = listOf("word")
         )
     )
 
     fun execute(name: String, args: Map<String, String>): String = when (name) {
         "update_dashboard" -> """{"success": true}"""
+        "show_pronunciations" -> """{"success": true}"""
         else -> """{"error": "Unknown function: $name"}"""
     }
 }
