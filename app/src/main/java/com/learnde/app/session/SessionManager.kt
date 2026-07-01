@@ -60,9 +60,10 @@ class SessionManager @Inject constructor(
     private val orchestrator: ConnectionOrchestrator,
     private val settingsStore: DataStore<AppSettings>,
     private val attachmentProcessor: com.learnde.app.attach.AttachmentProcessor,
-    private val pronunciationManager: com.learnde.app.domain.PronunciationManager,
     private val logger: AppLogger,
     private val toolRegistry: com.learnde.app.domain.ToolRegistry,
+    private val forvoRepository: com.learnde.app.data.forvo.ForvoRepository,
+    private val pronunciationPlayer: com.learnde.app.util.PronunciationPlayer,
 ) {
 
     data class State(
@@ -511,12 +512,7 @@ class SessionManager @Inject constructor(
         _state.update { st -> st.copy(transcript = (st.transcript + msg).takeLast(MAX_MSGS)) }
     }
 
-    private suspend fun handlePronunciationCheck(args: Map<String, String>): String {
-        val target = args["target_phrase"] ?: return "Error: missing target_phrase"
-        val result = pronunciationManager.check(target)
-        _state.update { it.copy(pronunciations = it.pronunciations + result) }
-        return "Pronunciation check completed: ${result.score}%"
-    }
+
 
     // ───────────────────────── Микрофон ─────────────────────────
 
