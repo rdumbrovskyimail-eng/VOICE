@@ -7,6 +7,7 @@ import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
@@ -32,7 +33,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
 import com.learnde.app.domain.model.ConversationMessage
-import com.learnde.app.domain.model.Pronunciation
+import com.learnde.app.domain.model.PronunciationItem
 import com.learnde.app.presentation.camera.CameraLayer
 import com.learnde.app.presentation.navigation.Routes
 import com.learnde.app.session.ClientMode
@@ -162,6 +163,15 @@ fun ClientScreen(navController: NavController, viewModel: ClientViewModel = hilt
                 }
             }
 
+            // 4b. ПРОИЗНОШЕНИЕ (Forvo) — тапаемые чипы со словами
+            if (state.pronunciations.isNotEmpty()) {
+                PronunciationChips(
+                    items = state.pronunciations,
+                    onPlay = { viewModel.playPronunciation(it) },
+                    onClear = { viewModel.clearPronunciations() }
+                )
+            }
+
             // 5. КАМЕРА (С индикатором LIVE)
             if (cameraActive) {
                 Box(
@@ -248,12 +258,7 @@ private fun ChatList(messages: List<ConversationMessage>, prefs: ChatPrefs, modi
         contentPadding = PaddingValues(vertical = Space.md)
     ) {
         items(messages) { msg -> 
-            Column(verticalArrangement = Arrangement.spacedBy(Space.xs)) {
-                MessageBubble(msg, prefs.fontScale, prefs.showRoleLabels, prefs.showTimestamps, timeFormatter)
-                if (msg.pronunciations.isNotEmpty()) {
-                    PronunciationChips(msg.pronunciations)
-                }
-            }
+            MessageBubble(msg, prefs.fontScale, prefs.showRoleLabels, prefs.showTimestamps, timeFormatter)
         }
     }
 }
@@ -272,25 +277,65 @@ private fun AttachmentChips(uris: List<Uri>, onRemove: (Uri) -> Unit) {
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun PronunciationChips(pronunciations: List<Pronunciation>) {
+private fun PronunciationChips(
+    items: List<PronunciationItem>,
+    onPlay: (PronunciationItem) -> Unit,
+    onClear: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
     val pal = AppTheme.palette
-    LazyRow(
-        horizontalArrangement = Arrangement.spacedBy(Space.xs),
-        contentPadding = PaddingValues(horizontal = Space.lg)
+    Column(
+        modifier
+            .fillMaxWidth()
+            .padding(horizontal = Space.lg, vertical = Space.sm)
     ) {
-        items(pronunciations) { p ->
-            Surface(
-                shape = RoundedCornerShape(Radius.pill),
-                color = pal.surfaceElevated,
-                border = androidx.compose.foundation.BorderStroke(1.dp, pal.outline)
-            ) {
-                Text(
-                    text = "${p.word}: ${p.ipa}",
-                    modifier = Modifier.padding(horizontal = Space.sm, vertical = 4.dp),
-                    style = MaterialTheme.typography.labelSmall,
-                    color = pal.textSecondary
-                )
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                "Произношение · Forvo",
+                color = pal.textSecondary,
+                style = MaterialTheme.typography.labelMedium,
+                modifier = Modifier.weight(1f)
+            )
+            IconButton(onClick = onClear, modifier = Modifier.size(24.dp)) {
+                Icon(Icons.Filled.Close, "Скрыть", tint = pal.textSecondary, modifier = Modifier.size(16.dp))
+            }
+        }
+        Spacer(Modifier.height(6.dp))
+        FlowRow(
+            horizontalArrangement = Arrangement.spacedBy(Space.sm),
+            verticalArrangement = Arrangement.spacedBy(Space.sm)
+        ) {
+            items.forEach { item ->
+                val ready = item.status == PronunciationItem.Status.Ready
+                val isError = item.status == PronunciationItem.Status.Error
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(Radius.pill))
+                        .background(if (isError) pal.errorBg else pal.accentBlueBg)
+                        .clickable(enabled = ready) { onPlay(item) }
+                        .padding(horizontal = Space.md, vertical = Space.sm)
+                ) {
+                    when (item.status) {
+                        PronunciationItem.Status.Loading ->
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(14.dp),
+                                strokeWidth = 2.dp,
+                                color = pal.accentBlue
+                            )
+                        PronunciationItem.Status.Ready ->
+                            Icon(Icons.Filled.PlayArrow, "Слушать", tint = pal.accentBlue, modifier = Modifier.size(18.dp))
+                        PronunciationItem.Status.Error -> Unit
+                    }
+                    if (item.status != PronunciationItem.Status.Error) Spacer(Modifier.width(4.dp))
+                    Text(
+                        item.word,
+                        color = if (isError) pal.textSecondary else pal.textPrimary,
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                }
             }
         }
     }
