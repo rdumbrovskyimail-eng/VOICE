@@ -29,14 +29,21 @@ class ToolRegistry @Inject constructor() {
         ),
         FunctionDeclarationConfig(
             name = "show_pronunciations",
-            description = "Показывает транскрипцию слова или фразы.",
+            description = "Показывает немецкие слова на экране как тапаемые карточки с " +
+                "произношением. Вызывай, когда пользователь просит показать/вывести немецкие " +
+                "слова, чтобы он мог нажать и услышать оригинальное произношение носителя. " +
+                "Существительные передавай с артиклем (der/die/das).",
             parameters = mapOf(
-                "word" to ParameterConfig(
-                    type = "STRING",
-                    description = "Слово или фраза для отображения транскрипции."
+                "words" to ParameterConfig(
+                    type = "ARRAY",
+                    description = "Список немецких слов или коротких фраз для показа.",
+                    items = ParameterConfig(
+                        type = "STRING",
+                        description = "Немецкое слово или фраза, напр. «der Hund»."
+                    )
                 )
             ),
-            required = listOf("word")
+            required = listOf("words")
         )
     )
 
