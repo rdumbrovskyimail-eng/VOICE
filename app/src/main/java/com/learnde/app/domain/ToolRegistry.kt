@@ -5,12 +5,6 @@ import com.learnde.app.domain.model.ParameterConfig
 import javax.inject.Inject
 import javax.inject.Singleton
 
-/**
- * Реестр инструментов (function calling) для Gemini Live.
- *  • getDeclarations() — список функций, уходящий в SessionConfig.
- *  • execute() — выполнение по имени; возвращает JSON-строку для ToolResponse.
- * Побочные эффекты для UI (вывод текста на дашборд) остаются в SessionManager.
- */
 @Singleton
 class ToolRegistry @Inject constructor() {
 
@@ -23,33 +17,25 @@ class ToolRegistry @Inject constructor() {
                 "text" to ParameterConfig(
                     type = "STRING",
                     description = "Текст, который нужно показать на экране."
-                )
-            ),
-            required = listOf("text")
-        ),
-        FunctionDeclarationConfig(
-            name = "show_pronunciations",
-            description = "Показывает немецкие слова на экране как тапаемые карточки с " +
-                "произношением. Вызывай, когда пользователь просит показать/вывести немецкие " +
-                "слова, чтобы он мог нажать и услышать оригинальное произношение носителя. " +
-                "Существительные передавай с артиклем (der/die/das).",
-            parameters = mapOf(
-                "words" to ParameterConfig(
+                ),
+                "german_words" to ParameterConfig(
                     type = "ARRAY",
-                    description = "Список немецких слов или коротких фраз для показа.",
+                    description = "СТРОГО только немецкие слова из текста. БЕЗ перевода, БЕЗ знаков препинания. " +
+                        "Существительные обязательно с артиклем (der/die/das). Глаголы в инфинитиве. " +
+                        "Правильный пример: [\"der Hund\", \"laufen\", \"schön\"]. " +
+                        "Неправильный пример: [\"der Hund (собака)\", \"lief\"].",
                     items = ParameterConfig(
                         type = "STRING",
-                        description = "Немецкое слово или фраза, напр. «der Hund»."
+                        description = "Немецкое слово в начальной форме."
                     )
                 )
             ),
-            required = listOf("words")
+            required = listOf("text") // german_words не обязателен, если немецких слов нет
         )
     )
 
     fun execute(name: String, args: Map<String, String>): String = when (name) {
         "update_dashboard" -> """{"success": true}"""
-        "show_pronunciations" -> """{"success": true}"""
         else -> """{"error": "Unknown function: $name"}"""
     }
 }
