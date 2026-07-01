@@ -428,7 +428,9 @@ class SessionManager @Inject constructor(
 
     private fun buildSystemInstruction(base: String, prompt: String): String {
         val modalityHint = "\n\nКАНАЛ ВВОДА: реплики, начинающиеся с «$TYPED_PREFIX», пользователь НАПЕЧАТАЛ вручную (как SMS); всё остальное он произнёс ГОЛОСОМ. Никогда не произноси и не повторяй сам тег «$TYPED_PREFIX» — это служебная пометка. На печатный ввод уместно отвечать чуть короче."
-        val toolHint = "\n\nУ тебя есть доступ к инструментам. Если ты объясняешь сложное понятие, переводишь фразу, диктуешь номер или формулу — ОБЯЗАТЕЛЬНО используй доступные функции для вывода информации на экран."
+        
+        // НОВЫЙ ЖЕСТКИЙ PROMPT ДЛЯ ИНСТРУМЕНТОВ
+        val toolHint = "\n\nУ тебя есть доступ к инструментам. Если ты объясняешь сложное понятие, переводишь фразу, диктуешь номер или формулу — ОБЯЗАТЕЛЬНО используй функцию update_dashboard для вывода информации на экран. Если в выводимом тексте есть немецкие слова — ТЫ ОБЯЗАН заполнить массив german_words. Это критически важно для работы аудио-плеера пользователя!"
 
         return if (prompt.isBlank()) base + modalityHint + toolHint
         else base + modalityHint + toolHint + "\n\n[Промпт для текущей сессии]:\n" + prompt
@@ -514,12 +516,22 @@ class SessionManager @Inject constructor(
                         appScope.launch {
                             val responses = event.functionCalls.map { call ->
                                 val result = toolRegistry.execute(call.name, call.args)
-                                when (call.name) {
-                                    "update_dashboard" ->
-                                        _state.update { it.copy(dashboardText = call.args["text"] ?: "") }
-                                    "show_pronunciations" ->
-                                        handleShowPronunciations(call.args["words"])
+                                
+                                if (call.name == "update_dashboard") {
+                                    // 1. Выводим текст на дашборд
+                                    val text = call.args["text"] ?: ""
+                                    _state.update { it.copy(dashboardText = text) }
+                                    
+                                    // 2. Автоматически ищем немецкие слова и показываем кнопки
+                                    val germanWords = call.args["german_words"]
+                                    if (!germanWords.isNullOrBlank() && germanWords != "[]") {
+                                        handleShowPronunciations(germanWords)
+                                    } else {
+                                        // Если слов нет, очищаем старые кнопки, чтобы не путать пользователя
+                                        clearPronunciations()
+                                    }
                                 }
+                                
                                 com.learnde.app.domain.ToolResponse(
                                     name = call.name,
                                     id = call.id,
