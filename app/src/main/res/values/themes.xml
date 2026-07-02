@@ -1,11 +1,13 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- ★ colorBackground = цвет фона новой светлой темы («тёплая бумага» #F7F6F2).
+     Убирает белую вспышку при запуске до отрисовки Compose. -->
 <resources>
     <style name="AppTheme" parent="Theme.Material3.DayNight.NoActionBar">
         <item name="android:statusBarColor">@android:color/transparent</item>
         <item name="android:navigationBarColor">@android:color/transparent</item>
         <item name="android:windowLightStatusBar">true</item>
         <item name="android:windowLightNavigationBar">true</item>
-        <item name="android:colorBackground">#FFFFFF</item>
+        <item name="android:colorBackground">#F7F6F2</item>
         <item name="windowNoTitle">true</item>
         <item name="windowActionBar">false</item>
     </style>
