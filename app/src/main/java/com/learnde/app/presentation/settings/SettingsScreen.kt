@@ -79,16 +79,6 @@ fun SettingsScreen(onBack: () -> Unit, viewModel: SettingsViewModel = hiltViewMo
                 SettingsSlider("Усиление Forvo: +${settings.forvoBoostPercent}%", settings.forvoBoostPercent.toFloat(), viewModel::updateForvoBoost, 0f..100f)
             }
 
-            // ★ Языковая пара синхронного переводчика.
-            SettingsSection("Переводчик") {
-                LanguagePickerField("Язык A", settings.translatorLangA, viewModel::updateTranslatorLangA)
-                LanguagePickerField("Язык B", settings.translatorLangB, viewModel::updateTranslatorLangB)
-                Text(
-                    "Переводчик слушает оба языка и озвучивает перевод на противоположный.",
-                    style = MaterialTheme.typography.bodySmall, color = pal.textDim
-                )
-            }
-
             SettingsSection("Поведение") {
                 SettingsTextField("Системная инструкция", settings.systemInstruction, viewModel::updateSystemInstruction, "Ты ассистент...", false)
                 SettingsSlider("Креативность: ${String.format(java.util.Locale.US, "%.1f", settings.temperature)}", settings.temperature, viewModel::updateTemperature, 0f..2f)
