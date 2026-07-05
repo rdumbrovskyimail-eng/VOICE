@@ -5,11 +5,10 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material.icons.filled.Stop
+import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Videocam
 import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -36,37 +35,38 @@ fun AppHeader(
     modifier: Modifier = Modifier,
 ) {
     val pal = AppTheme.palette
-    // Шапка стала воздушной. Нет подложек кнопок и жестких границ.
-    Row(modifier = modifier.fillMaxWidth().height(56.dp), verticalAlignment = Alignment.CenterVertically) {
-        StatusLabel(presence)
-        Spacer(Modifier.weight(1f))
-
-        val btnIconTint = if (isLinkActive) pal.error else pal.textPrimary
-        
-        IconButton(
-            onClick = onToggleConnection,
-            modifier = Modifier.size(44.dp) // Теперь просто крупная изящная иконка
-        ) {
-            Icon(
-                imageVector = if (isLinkActive) Icons.Filled.Stop else Icons.Filled.PlayArrow,
-                contentDescription = "Подключение", 
-                tint = btnIconTint, 
-                modifier = Modifier.size(28.dp)
-            )
+    
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .height(56.dp)
+            .background(pal.background)
+            .padding(horizontal = Space.md),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        // Иконка меню/настроек слева (как в ChatGPT)
+        IconButton(onClick = onSettings) {
+            Icon(Icons.Filled.Menu, "Меню", tint = pal.textPrimary)
         }
         
-        ToolbarIcon(icon = Icons.Filled.Videocam, label = "Камера", active = camMode, onClick = onToggleCam)
-        ToolbarIcon(icon = Icons.Filled.Settings, label = "Настройки", active = false, onClick = onSettings)
-    }
-}
+        Spacer(Modifier.weight(1f))
+        
+        // Центральный статус (очень минималистичный)
+        Text(
+            text = if (isLinkActive) "Gemini Live" else "Gemini",
+            style = MaterialTheme.typography.titleLarge,
+            color = pal.textPrimary
+        )
+        
+        Spacer(Modifier.weight(1f))
 
-@Composable
-private fun ToolbarIcon(icon: ImageVector, label: String, active: Boolean, onClick: () -> Unit) {
-    val pal = AppTheme.palette
-    IconButton(
-        onClick = onClick,
-        modifier = Modifier.size(40.dp).clip(RoundedCornerShape(Radius.md)).background(if (active) pal.accentBlueBg else pal.surfaceElevated)
-    ) {
-        Icon(imageVector = icon, contentDescription = label, tint = if (active) pal.accentBlue else pal.textSecondary, modifier = Modifier.size(20.dp))
+        // Иконка камеры справа
+        IconButton(onClick = onToggleCam) {
+            Icon(
+                imageVector = Icons.Filled.Videocam, 
+                contentDescription = "Камера", 
+                tint = if (camMode) pal.textPrimary else pal.textSecondary
+            )
+        }
     }
 }
