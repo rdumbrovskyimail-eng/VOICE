@@ -18,6 +18,9 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.ArrowUpward
+import androidx.compose.material.icons.outlined.Mic
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -462,16 +465,33 @@ private fun fileExt(ctx: android.content.Context, uri: Uri): String {
 @Composable
 fun ChatEmptyState(modifier: Modifier = Modifier) {
     val pal = AppTheme.palette
-    Column(
-        modifier.fillMaxSize().padding(Space.xl),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center,
+    // В ChatGPT пустой экран содержит просто логотип по центру. Сделаем максимально чисто.
+    Box(
+        modifier = modifier.fillMaxSize(),
+        contentAlignment = Alignment.Center
     ) {
-        Icon(Icons.Filled.Mic, contentDescription = null, tint = pal.textDim, modifier = Modifier.size(32.dp))
-        Spacer(Modifier.height(Space.md))
-        Text("Ассистент готов к работе", style = MaterialTheme.typography.titleLarge, color = pal.textPrimary)
-        Spacer(Modifier.height(Space.xs))
-        Text("Нажмите на микрофон, чтобы начать диалог,\nили напишите сообщение текстом.", style = MaterialTheme.typography.bodyMedium, color = pal.textSecondary, textAlign = TextAlign.Center)
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Box(
+                modifier = Modifier
+                    .size(48.dp)
+                    .clip(CircleShape)
+                    .background(pal.surfaceVariant),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    Icons.Outlined.Mic, 
+                    contentDescription = null, 
+                    tint = pal.textPrimary, 
+                    modifier = Modifier.size(24.dp)
+                )
+            }
+            Spacer(Modifier.height(Space.md))
+            Text(
+                "Чем я могу помочь?", 
+                style = MaterialTheme.typography.titleLarge, 
+                color = pal.textPrimary
+            )
+        }
     }
 }
 
@@ -483,42 +503,53 @@ fun MessageBubble(
     val pal = AppTheme.palette
     val isUser = msg.role == ConversationMessage.ROLE_USER
 
-    // Искусный минимализм. Вместо плашек мы меняем оттенки, шрифты и расположение.
-    val textColor = if (isUser) pal.textDim else pal.textPrimary
-    val align = if (isUser) Alignment.End else Alignment.Start
-    val textAlign = if (isUser) TextAlign.End else TextAlign.Start
-    
-    // Большие отступы, чтобы тексты свободно парили на холсте
-    val startPad = if (isUser) 64.dp else 0.dp
-    val endPad = if (isUser) 0.dp else 64.dp
-
     Column(
         modifier = modifier
             .fillMaxWidth()
-            .padding(vertical = Space.md)
-            .padding(start = startPad, end = endPad),
-        horizontalAlignment = align
+            .padding(vertical = Space.sm),
+        horizontalAlignment = if (isUser) Alignment.End else Alignment.Start
     ) {
-        if (msg.text.isNotEmpty()) {
-            Text(
-                text = msg.text,
-                style = MaterialTheme.typography.bodyLarge,
-                color = textColor,
-                fontSize = (if (isUser) 18f else 22f * fontScale).sp, // ИИ всегда немного доминирует
-                lineHeight = (if (isUser) 24f else 30f * fontScale).sp,
-                fontWeight = if (isUser) FontWeight.Normal else FontWeight.Medium,
-                textAlign = textAlign,
-            )
+        if (isUser) {
+            // Сообщение пользователя: Серый "пузырь" (Pill-like)
+            Box(
+                Modifier
+                    .widthIn(max = 320.dp)
+                    .clip(RoundedCornerShape(Radius.xl))
+                    .background(pal.surfaceVariant)
+                    .padding(horizontal = Space.lg, vertical = 10.dp)
+            ) {
+                Text(
+                    text = msg.text,
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = pal.textPrimary,
+                    fontSize = (16 * fontScale).sp
+                )
+            }
+        } else {
+            // Сообщение ИИ: Без фона, просто текст на всю ширину
+            Box(
+                Modifier
+                    .fillMaxWidth()
+                    .padding(end = Space.xl) // Отступ справа, чтобы текст не прилипал к краю
+            ) {
+                Text(
+                    text = msg.text,
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = pal.textPrimary,
+                    fontSize = (16 * fontScale).sp,
+                    lineHeight = (24 * fontScale).sp
+                )
+            }
         }
         
-        // Вложения становятся не кнопкой, а элегантной курсивной аннотацией 
+        // Вложения (если есть)
         if (msg.attachmentUris.isNotEmpty()) {
             Spacer(Modifier.height(Space.xs))
             Text(
-                text = "— прикреплены файлы (${msg.attachmentUris.size})",
-                style = MaterialTheme.typography.labelSmall.copy(fontStyle = androidx.compose.ui.text.font.FontStyle.Italic),
-                color = pal.textDim.copy(alpha = 0.5f),
-                textAlign = textAlign
+                text = "${msg.attachmentUris.size} файл(ов)",
+                style = MaterialTheme.typography.labelLarge,
+                color = pal.textSecondary,
+                modifier = Modifier.padding(horizontal = Space.sm)
             )
         }
     }
@@ -534,57 +565,84 @@ fun ChatInputBar(
     Row(
         modifier = modifier
             .fillMaxWidth()
-            .padding(horizontal = Space.xl, vertical = Space.lg)
-            // Пилл (Таблетка) парящая над фоном 
-            .clip(RoundedCornerShape(32.dp))
-            .background(pal.surfaceElevated.copy(alpha = 0.5f)) // Стеклянная прозрачность
-            .padding(horizontal = 8.dp, vertical = 6.dp),
-        verticalAlignment = Alignment.CenterVertically
+            .padding(horizontal = Space.lg, vertical = Space.md),
+        verticalAlignment = Alignment.Bottom
     ) {
-        IconButton(onClick = onAttach, modifier = Modifier.size(40.dp)) {
-            Icon(Icons.Filled.AttachFile, "Вложения", tint = pal.textSecondary)
-        }
-
-        // Невидимый текстовый элемент (никаких рамочек и placeholder'ов от Outlined)
-        androidx.compose.foundation.text.BasicTextField(
-            value = value,
-            onValueChange = onValueChange,
-            textStyle = MaterialTheme.typography.bodyLarge.copy(color = pal.textPrimary, fontSize = 18.sp),
-            modifier = Modifier.weight(1f).padding(horizontal = Space.sm),
-            decorationBox = { innerTextField ->
-                if (value.isEmpty()) {
-                    Text(
-                        text = "Коснитесь, чтобы заговорить", 
-                        color = pal.textDim.copy(alpha = 0.6f), 
-                        style = MaterialTheme.typography.bodyLarge.copy(fontSize = 18.sp)
-                    )
-                }
-                innerTextField()
-            }
-        )
-
-        // Изящный индикатор "Кнопки", динамически меняющий значение 
-        if (value.isNotBlank()) {
+        // Главный контейнер инпута (Светло-серая таблетка)
+        Row(
+            modifier = Modifier
+                .weight(1f)
+                .clip(RoundedCornerShape(Radius.xl))
+                .background(pal.surfaceVariant)
+                .padding(start = 4.dp, end = 4.dp, top = 4.dp, bottom = 4.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            // Кнопка "+" (Вложения)
             IconButton(
-                onClick = onSend, 
-                modifier = Modifier.size(44.dp).clip(CircleShape).background(pal.textPrimary)
-            ) {
-                Icon(Icons.Filled.Send, "Отправить", tint = pal.background, modifier = Modifier.size(16.dp))
-            }
-        } else {
-            Box(
-                modifier = Modifier
-                    .size(44.dp)
-                    .clip(CircleShape)
-                    .background(if (isMicActive) pal.accentBlue else Color.Transparent)
-                    .clickable { onToggleMic() },
-                contentAlignment = Alignment.Center
+                onClick = onAttach, 
+                modifier = Modifier.size(40.dp)
             ) {
                 Icon(
-                    imageVector = Icons.Filled.Mic, 
-                    contentDescription = "Микрофон", 
-                    tint = if (isMicActive) Color.White else pal.textPrimary
+                    imageVector = Icons.Filled.Add, 
+                    contentDescription = "Прикрепить", 
+                    tint = pal.textSecondary,
+                    modifier = Modifier.size(24.dp)
                 )
+            }
+
+            // Поле ввода
+            androidx.compose.foundation.text.BasicTextField(
+                value = value,
+                onValueChange = onValueChange,
+                textStyle = MaterialTheme.typography.bodyLarge.copy(color = pal.textPrimary),
+                modifier = Modifier
+                    .weight(1f)
+                    .padding(horizontal = Space.xs, vertical = 10.dp)
+                    .defaultMinSize(minHeight = 24.dp),
+                maxLines = 5,
+                decorationBox = { innerTextField ->
+                    if (value.isEmpty()) {
+                        Text(
+                            text = "Сообщение", 
+                            color = pal.textSecondary, 
+                            style = MaterialTheme.typography.bodyLarge
+                        )
+                    }
+                    innerTextField()
+                }
+            )
+
+            // Кнопка Отправить ИЛИ Микрофон
+            if (value.isNotBlank()) {
+                // Черный круг со стрелкой вверх (как в ChatGPT)
+                Box(
+                    modifier = Modifier
+                        .size(36.dp)
+                        .clip(CircleShape)
+                        .background(pal.actionPrimary)
+                        .clickable { onSend() },
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.ArrowUpward, 
+                        contentDescription = "Отправить", 
+                        tint = pal.actionPrimaryText, 
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
+            } else {
+                // Иконка микрофона
+                IconButton(
+                    onClick = onToggleMic,
+                    modifier = Modifier.size(40.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Outlined.Mic, 
+                        contentDescription = "Микрофон", 
+                        tint = if (isMicActive) pal.accentActive else pal.textSecondary,
+                        modifier = Modifier.size(24.dp)
+                    )
+                }
             }
         }
     }
