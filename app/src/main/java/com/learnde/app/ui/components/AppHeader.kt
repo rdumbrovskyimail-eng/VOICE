@@ -3,6 +3,7 @@ package com.learnde.app.ui.components
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Menu
@@ -15,11 +16,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import com.learnde.app.ui.theme.AppTheme
 import com.learnde.app.ui.theme.Radius
 import com.learnde.app.ui.theme.Space
@@ -44,19 +42,37 @@ fun AppHeader(
             .padding(horizontal = Space.md),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        // Иконка меню/настроек слева (как в ChatGPT)
+        // Иконка меню/настроек слева
         IconButton(onClick = onSettings) {
             Icon(Icons.Filled.Menu, "Меню", tint = pal.textPrimary)
         }
         
         Spacer(Modifier.weight(1f))
         
-        // Центральный статус (очень минималистичный)
-        Text(
-            text = if (isLinkActive) "Gemini Live" else "Gemini",
-            style = MaterialTheme.typography.titleLarge,
-            color = pal.textPrimary
-        )
+        // Центральная кнопка старта/стопа сессии
+        Row(
+            modifier = Modifier
+                .clip(RoundedCornerShape(Radius.pill))
+                .clickable { onToggleConnection() }
+                .background(if (isLinkActive) pal.accentGreenBg else pal.surfaceVariant)
+                .padding(horizontal = 16.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            // Зеленая или серая точка статуса
+            Box(
+                modifier = Modifier
+                    .size(8.dp)
+                    .clip(CircleShape)
+                    .background(if (isLinkActive) pal.accentGreen else pal.textDim)
+            )
+            Spacer(Modifier.width(8.dp))
+            Text(
+                text = if (isLinkActive) "Gemini Live" else "Подключиться",
+                style = MaterialTheme.typography.labelLarge,
+                color = if (isLinkActive) pal.accentGreen else pal.textPrimary,
+                fontWeight = FontWeight.SemiBold
+            )
+        }
         
         Spacer(Modifier.weight(1f))
 
