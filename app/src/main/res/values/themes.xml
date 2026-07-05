@@ -1,12 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
-
-<resources>
-    <style name="AppTheme" parent="Theme.Material3.DayNight.NoActionBar">
+<resources xmlns:tools="http://schemas.android.com/tools">
+    <style name="AppTheme" parent="Theme.Material3.DayNight.NoActionBar" tools:targetApi="27">
         <item name="android:statusBarColor">@android:color/transparent</item>
         <item name="android:navigationBarColor">@android:color/transparent</item>
         <item name="android:windowLightStatusBar">true</item>
         <item name="android:windowLightNavigationBar">true</item>
-        <item name="android:colorBackground">#F7F6F2</item>
+        <item name="android:colorBackground">#F6F1E4</item>
         <item name="windowNoTitle">true</item>
         <item name="windowActionBar">false</item>
     </style>
