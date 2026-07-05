@@ -496,6 +496,7 @@ fun MessageBubble(
             Text(
                 text = if (isUser) "Вы" else "Ассистент",
                 style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
+                // Роли подписываем синей ручкой или серым цветом
                 color = if (isUser) pal.accentBlue else pal.textDim,
                 modifier = Modifier.padding(bottom = 4.dp)
             )
@@ -505,7 +506,8 @@ fun MessageBubble(
             Text(
                 text = msg.text, 
                 style = MaterialTheme.typography.bodyLarge, 
-                color = if (isUser) pal.accentBlue else pal.textPrimary, 
+                // ВЕСЬ ТЕКСТ ТЕПЕРЬ СТРОГО ТЕМНЫЙ (textPrimary)
+                color = pal.textPrimary, 
                 fontSize = (16 * fontScale).sp,
                 modifier = Modifier.padding(start = if (isUser) 0.dp else Space.md)
             )
