@@ -1,16 +1,3 @@
-// Путь: app/src/main/java/com/learnde/app/translate/TranslatorManager.kt
-//
-// Владелец синхронного перевода. Переиспользует общий @Singleton AudioEngine (тот же,
-// что у ассистента → его аудио-тюнинг: VOICE_COMMUNICATION, AEC, маршрутизация на динамик).
-//
-// Двунаправленный RU<->DE = ДВА потока LiveTranslateClient:
-//   • target=de, echo=false  → RU→DE (немецкий вход здесь молчит);
-//   • target=ru, echo=false  → DE→RU (русский  вход здесь молчит).
-// Один и тот же звук мика шлётся в оба потока; озвучивает только «нужное» направление.
-//
-// Защита от само-перевода (feedback): пока проигрывается перевод, мик в потоки НЕ шлём
-// (тот же приём, что у ассистента — playbackAudibleUntilMs). Плюс аппаратный AEC.
-
 package com.learnde.app.translate
 
 import androidx.datastore.core.DataStore
@@ -32,18 +19,31 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import javax.inject.Inject
 import javax.inject.Singleton
+import kotlin.math.min
 import kotlin.math.sqrt
 
 enum class TranslatorStatus { Idle, Connecting, Listening, Translating, Error }
-enum class Direction { RU_TO_DE, DE_TO_RU }
+enum class Direction { A_TO_B, B_TO_A }
+
+/** Завершённая реплика в ленте переводчика. */
+data class TranslationSegment(
+    val fromCode: String,
+    val toCode: String,
+    val source: String,
+    val translation: String,
+    val timeMs: Long = System.currentTimeMillis(),
+)
 
 data class TranslatorUiState(
     val status: TranslatorStatus = TranslatorStatus.Idle,
-    val sourceText: String = "",
-    val translationText: String = "",
+    val langA: String = "ru",
+    val langB: String = "de",
+    val history: List<TranslationSegment> = emptyList(),
+    val liveSource: String = "",
+    val liveTranslation: String = "",
     val direction: Direction? = null,
+    val reconnecting: Boolean = false,
     val error: String? = null,
-    val bidirectional: Boolean = true,
 )
 
 @Singleton
@@ -53,17 +53,21 @@ class TranslatorManager @Inject constructor(
     private val logger: AppLogger,
 ) {
     companion object {
-        const val LANG_DE = "de"
-        const val LANG_RU = "ru"
         private const val VIS_GAIN = 3.5f
         private const val AMP_DECAY = 0.82f
         private const val AMP_TICK_MS = 60L
         private const val PLAYBACK_GUARD_MS = 200L
+        private const val MAX_SEGMENTS = 60
+        private const val RECONNECT_ATTEMPTS = 5
+        private const val RECONNECT_BASE_MS = 1_500L
+        private const val RECONNECT_MAX_MS = 15_000L
     }
 
     private val scope = CoroutineScope(
         SupervisorJob() + Dispatchers.Default +
-            kotlinx.coroutines.CoroutineExceptionHandler { _, e -> logger.e("TranslatorManager uncaught: ${e.message}", e) }
+            kotlinx.coroutines.CoroutineExceptionHandler { _, e ->
+                logger.e("TranslatorManager uncaught: ${e.message}", e)
+            }
     )
 
     private val _state = MutableStateFlow(TranslatorUiState())
@@ -75,58 +79,53 @@ class TranslatorManager @Inject constructor(
     private val lifecycleMutex = Mutex()
     @Volatile private var running = false
 
-    private var clientDe: LiveTranslateClient? = null
-    private var clientRu: LiveTranslateClient? = null
+    private var apiKey: String = ""
+    private var langA: String = "ru"
+    private var langB: String = "de"
+
+    private var clientToB: LiveTranslateClient? = null
+    private var clientToA: LiveTranslateClient? = null
 
     private var micJob: Job? = null
     private var decayJob: Job? = null
     private val collectJobs = mutableListOf<Job>()
 
-    // Последний распознанный источник по каждому потоку.
-    @Volatile private var lastInputDe: String = ""
-    @Volatile private var lastInputRu: String = ""
+    @Volatile private var srcToB = ""; @Volatile private var outToB = ""
+    @Volatile private var srcToA = ""; @Volatile private var outToA = ""
 
     fun start(bidirectional: Boolean = true) {
         scope.launch {
             lifecycleMutex.withLock {
                 if (running) return@withLock
 
-                val apiKey = settingsStore.data.first().apiKey
+                val s = settingsStore.data.first()
+                apiKey = s.apiKey
+                langA = s.translatorLangA.ifBlank { "ru" }
+                langB = s.translatorLangB.ifBlank { "de" }
+
                 if (apiKey.isBlank()) {
                     _state.value = TranslatorUiState(
                         status = TranslatorStatus.Error,
+                        langA = langA, langB = langB,
                         error = "API ключ не задан в настройках",
-                        bidirectional = bidirectional
                     )
                     return@withLock
                 }
 
                 running = true
-                lastInputDe = ""; lastInputRu = ""
-                _state.value = TranslatorUiState(status = TranslatorStatus.Connecting, bidirectional = bidirectional)
+                srcToB = ""; outToB = ""; srcToA = ""; outToA = ""
+                _state.value = TranslatorUiState(
+                    status = TranslatorStatus.Connecting, langA = langA, langB = langB
+                )
 
-                // Громкая связь + AEC (как у ассистента) — иначе перевод вернётся в мик.
                 audioEngine.setAecEnabled(true)
                 audioEngine.setFullDuplexMode(true)
                 audioEngine.setSpeakerRouting(true)
                 audioEngine.resetPlaybackClock()
                 runCatching { audioEngine.initPlayback() }
 
-                // RU → DE
-                LiveTranslateClient(LANG_DE, echoTargetLanguage = false, logger = logger).also {
-                    clientDe = it
-                    collectJobs += scope.launch { collectClient(it) }
-                    it.connect(apiKey)
-                }
-
-                // DE → RU
-                if (bidirectional) {
-                    LiveTranslateClient(LANG_RU, echoTargetLanguage = false, logger = logger).also {
-                        clientRu = it
-                        collectJobs += scope.launch { collectClient(it) }
-                        it.connect(apiKey)
-                    }
-                }
+                spawnClient(target = langB) { clientToB = it }                     // A → B
+                if (bidirectional) spawnClient(target = langA) { clientToA = it }  // B → A
 
                 startMic()
                 startAmplitudeLoop()
@@ -144,18 +143,28 @@ class TranslatorManager @Inject constructor(
                 collectJobs.forEach { it.cancel() }; collectJobs.clear()
                 runCatching { audioEngine.stopCapture() }
                 runCatching { audioEngine.releaseAll() }
-                clientDe?.disconnect(); clientDe = null
-                clientRu?.disconnect(); clientRu = null
+                clientToB?.disconnect(); clientToB = null
+                clientToA?.disconnect(); clientToA = null
                 _amplitude.value = 0f
-                _state.value = TranslatorUiState(status = TranslatorStatus.Idle)
+                _state.value = TranslatorUiState(langA = langA, langB = langB)
             }
         }
     }
 
+    private fun spawnClient(target: String, assign: (LiveTranslateClient) -> Unit) {
+        val client = LiveTranslateClient(target, echoTargetLanguage = false, logger = logger)
+        assign(client)
+        collectJobs += scope.launch { collectClient(client) }
+        client.connect(apiKey)
+    }
+
     private suspend fun startMic() {
         val ok = runCatching { audioEngine.startCapture() }.isSuccess
-        if (!ok) {
-            _state.update { it.copy(status = TranslatorStatus.Error, error = "Микрофон занят. Закройте другие приложения и повторите.") }
+        if (!ok || !audioEngine.isCapturing) {
+            _state.update {
+                it.copy(status = TranslatorStatus.Error,
+                    error = "Микрофон занят. Закройте другие приложения и повторите.")
+            }
             return
         }
         micJob = scope.launch {
@@ -163,8 +172,8 @@ class TranslatorManager @Inject constructor(
                 val now = System.currentTimeMillis()
                 val playing = now <= audioEngine.playbackAudibleUntilMs + PLAYBACK_GUARD_MS
                 if (!playing) {
-                    clientDe?.sendAudio(chunk)
-                    clientRu?.sendAudio(chunk)
+                    clientToB?.sendAudio(chunk)
+                    clientToA?.sendAudio(chunk)
                     pushLevel(visLevel(rms(chunk)))
                 }
             }
@@ -172,46 +181,90 @@ class TranslatorManager @Inject constructor(
     }
 
     private suspend fun collectClient(client: LiveTranslateClient) {
+        val toB = client.target == langB
+        val from = if (toB) langA else langB
+        val to = client.target
+        var attempts = 0
+
         client.events.collect { ev ->
             when (ev) {
                 is TranslateEvent.Ready -> {
-                    if (_state.value.status == TranslatorStatus.Connecting) {
-                        _state.update { it.copy(status = TranslatorStatus.Listening, error = null) }
-                    }
-                }
-                is TranslateEvent.InputText -> {
-                    if (client.target == LANG_DE) lastInputDe = ev.text else lastInputRu = ev.text
-                }
-                is TranslateEvent.OutputText -> {
-                    // Поток, который реально перевёл, и есть активное направление.
-                    val dir = if (client.target == LANG_DE) Direction.RU_TO_DE else Direction.DE_TO_RU
-                    val src = if (client.target == LANG_DE) lastInputDe else lastInputRu
+                    attempts = 0
                     _state.update {
                         it.copy(
-                            status = TranslatorStatus.Translating,
-                            direction = dir,
-                            sourceText = src,
-                            translationText = ev.text,
+                            status = if (it.status == TranslatorStatus.Connecting)
+                                TranslatorStatus.Listening else it.status,
+                            reconnecting = false,
                             error = null,
                         )
                     }
                 }
+
+                is TranslateEvent.InputText -> {
+                    if (toB) srcToB += ev.text else srcToA += ev.text
+                }
+
+                is TranslateEvent.OutputText -> {
+                    val src: String; val out: String
+                    if (toB) { outToB += ev.text; src = srcToB; out = outToB }
+                    else     { outToA += ev.text; src = srcToA; out = outToA }
+                    _state.update {
+                        it.copy(
+                            status = TranslatorStatus.Translating,
+                            direction = if (toB) Direction.A_TO_B else Direction.B_TO_A,
+                            liveSource = src.trim(),
+                            liveTranslation = out.trim(),
+                            error = null,
+                        )
+                    }
+                }
+
                 is TranslateEvent.Audio -> {
                     runCatching { audioEngine.enqueuePlayback(ev.pcm) }
                     pushLevel(visLevel(rms(ev.pcm)))
                 }
-                is TranslateEvent.Closed -> {
-                    if (running && ev.code != 1000 && ev.code != 1001) {
-                        val extra = if (ev.reason.isNotBlank()) " ${ev.reason.take(160)}" else ""
+
+                is TranslateEvent.TurnComplete -> {
+                    val src = (if (toB) srcToB else srcToA).trim()
+                    val out = (if (toB) outToB else outToA).trim()
+                    if (toB) { srcToB = ""; outToB = "" } else { srcToA = ""; outToA = "" }
+                    if (out.isNotEmpty()) {
                         _state.update {
-                            it.copy(status = TranslatorStatus.Error,
-                                error = "Соединение прервано (${ev.code}).$extra Нажмите микрофон, чтобы переподключиться.")
+                            it.copy(
+                                history = (it.history + TranslationSegment(from, to, src, out))
+                                    .takeLast(MAX_SEGMENTS),
+                                liveSource = "",
+                                liveTranslation = "",
+                            )
                         }
                     }
                 }
-                is TranslateEvent.Error -> {
-                    if (running) _state.update { it.copy(status = TranslatorStatus.Error, error = ev.message) }
+
+                is TranslateEvent.Closed -> {
+                    if (running && ev.code != 1000 && ev.code != 1001) {
+                        attempts++
+                        if (attempts <= RECONNECT_ATTEMPTS) {
+                            _state.update { it.copy(reconnecting = true) }
+                            val backoff = min(
+                                RECONNECT_BASE_MS * (1L shl (attempts - 1)),
+                                RECONNECT_MAX_MS
+                            )
+                            logger.w("Translate[$to]: reconnect #$attempts in ${backoff}ms (code=${ev.code})")
+                            delay(backoff)
+                            if (running) client.connect(apiKey)
+                        } else {
+                            _state.update {
+                                it.copy(
+                                    status = TranslatorStatus.Error,
+                                    reconnecting = false,
+                                    error = "Соединение потеряно (${ev.code}). Нажмите кнопку, чтобы переподключиться.",
+                                )
+                            }
+                        }
+                    }
                 }
+
+                is TranslateEvent.Error -> Unit // детали придут в Closed
             }
         }
     }
@@ -224,12 +277,14 @@ class TranslatorManager @Inject constructor(
                 if (cur > 0.001f) _amplitude.value = cur * AMP_DECAY
                 else if (cur != 0f) _amplitude.value = 0f
 
-                // Перевод доигран → снова «слушаем».
                 val now = System.currentTimeMillis()
                 if (_state.value.status == TranslatorStatus.Translating &&
                     now > audioEngine.playbackAudibleUntilMs + 300L
                 ) {
-                    _state.update { if (it.status == TranslatorStatus.Translating) it.copy(status = TranslatorStatus.Listening) else it }
+                    _state.update {
+                        if (it.status == TranslatorStatus.Translating)
+                            it.copy(status = TranslatorStatus.Listening) else it
+                    }
                 }
             }
         }
@@ -242,7 +297,6 @@ class TranslatorManager @Inject constructor(
 
     private fun visLevel(r: Float): Float = (r * VIS_GAIN).coerceIn(0f, 1f)
 
-    /** RMS из PCM16 little-endian → 0..1. */
     private fun rms(pcm: ByteArray): Float {
         if (pcm.size < 2) return 0f
         var sum = 0.0
