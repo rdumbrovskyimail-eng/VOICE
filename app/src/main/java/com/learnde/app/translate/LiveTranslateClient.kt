@@ -26,6 +26,7 @@ import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.add
+import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.jsonObject
@@ -40,6 +41,7 @@ import java.util.concurrent.TimeUnit
 
 sealed interface TranslateEvent {
     data object Ready : TranslateEvent
+    data object TurnComplete : TranslateEvent
     data class InputText(val text: String, val lang: String?) : TranslateEvent
     data class OutputText(val text: String, val lang: String?) : TranslateEvent
     data class Audio(val pcm: ByteArray) : TranslateEvent
@@ -77,6 +79,7 @@ class LiveTranslateClient(
     val events: Flow<TranslateEvent> = _events.asSharedFlow()
 
     fun connect(apiKey: String) {
+        runCatching { webSocket?.close(1000, "reconnect") } // сброс предыдущего сокета при переподключении
         val url = "wss://${SessionConfig.WS_HOST}/${SessionConfig.WS_PATH}?key=${apiKey.trim()}"
         logger.d("Translate[$targetLanguageCode]: connecting…")
         val request = Request.Builder().url(url).build()
@@ -179,6 +182,10 @@ class LiveTranslateClient(
                 val text = node["text"]?.jsonPrimitive?.content
                 val lang = node["languageCode"]?.jsonPrimitive?.content
                 if (!text.isNullOrBlank()) _events.tryEmit(TranslateEvent.OutputText(text, lang))
+            }
+
+            if (sc["turnComplete"]?.jsonPrimitive?.booleanOrNull == true) {
+                _events.tryEmit(TranslateEvent.TurnComplete)
             }
 
             (sc["modelTurn"]?.jsonObject?.get("parts") as? JsonArray)?.forEach { part ->
