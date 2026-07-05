@@ -41,50 +41,10 @@ private fun presenceLabel(p: Presence): String = when (p) {
 
 @Composable
 fun StatusLabel(presence: Presence, modifier: Modifier = Modifier) {
-    val pal = AppTheme.palette
-    val (bgColor, textColor) = when (presence) {
-        Presence.Listening -> pal.accentGreenBg to pal.accentGreen
-        Presence.Speaking -> pal.accentBlueBg to pal.accentBlue
-        Presence.Error -> pal.errorBg to pal.error
-        Presence.Offline -> pal.surface to pal.textSecondary
-        else -> pal.surfaceElevated to pal.textPrimary
-    }
-
-    Row(
+    Text(
+        text = presenceLabel(presence),
+        style = MaterialTheme.typography.labelMedium,
+        color = AppTheme.palette.textSecondary,
         modifier = modifier
-            .clip(RoundedCornerShape(Radius.sm))
-            .background(bgColor)
-            .padding(horizontal = Space.sm, vertical = 4.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        if (presence == Presence.Speaking) {
-            GeminiSpeakingDots()
-            Spacer(Modifier.width(6.dp))
-        }
-        Text(presenceLabel(presence), style = MaterialTheme.typography.labelLarge, color = textColor)
-    }
-}
-
-@Composable
-private fun GeminiSpeakingDots() {
-    val pal = AppTheme.palette
-    val infiniteTransition = rememberInfiniteTransition(label = "dots")
-
-    @Composable
-    fun animateDot(delay: Int): Float {
-        val scale by infiniteTransition.animateFloat(
-            initialValue = 0.4f, targetValue = 1f,
-            animationSpec = infiniteRepeatable(
-                animation = tween(500, delayMillis = delay, easing = FastOutSlowInEasing),
-                repeatMode = RepeatMode.Reverse
-            ), label = "dot"
-        )
-        return scale
-    }
-
-    Row(horizontalArrangement = Arrangement.spacedBy(3.dp), verticalAlignment = Alignment.CenterVertically) {
-        Box(Modifier.size(4.dp).clip(CircleShape).background(pal.accentBlue.copy(alpha = animateDot(0))))
-        Box(Modifier.size(4.dp).clip(CircleShape).background(pal.accentBlue.copy(alpha = animateDot(150))))
-        Box(Modifier.size(4.dp).clip(CircleShape).background(pal.accentBlue.copy(alpha = animateDot(300))))
-    }
+    )
 }
