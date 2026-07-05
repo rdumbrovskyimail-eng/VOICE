@@ -26,7 +26,10 @@ enum class ThemeMode { AUTO, LIGHT, DARK }
 data class AppSettings(
     // ─────────── Ключи / модель ───────────
     val apiKey: String = "",
-    val forvoApiKey: String = "",      // ← ДОБАВИТЬ. Ключ Forvo Pronunciation API.
+    val forvoApiKey: String = "",       // Ключ Forvo Pronunciation API.
+    val forvoBoostPercent: Int = 35,    // Цифровое усиление Forvo (LoudnessEnhancer), 0–100 %.
+    val translatorLangA: String = "ru", // Языковая пара синхронного переводчика.
+    val translatorLangB: String = "de",
     val model: String = "models/gemini-3.1-flash-live-preview",
 
     // ─────────── Генерация ───────────
@@ -43,8 +46,9 @@ data class AppSettings(
 
     // ─────────── Аудио-движок ───────────
     val useAec: Boolean = true,
-    // Полный дуплекс: можно перебивать ассистента голосом. Требует аппаратного AEC.
-    val bargeInEnabled: Boolean = false,
+    // Полный дуплекс: можно перебивать ассистента голосом. Включено по умолчанию;
+    // AEC активируется автоматически (см. SessionManager.buildConfig).
+    val bargeInEnabled: Boolean = true,
     val jitterPreBufferChunks: Int = 3,
     val jitterTimeoutMs: Long = 150L,
     val playbackQueueCapacity: Int = 256,
