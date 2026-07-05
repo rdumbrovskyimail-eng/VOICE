@@ -253,7 +253,10 @@ class SessionManager @Inject constructor(
     /** Тап по чипу произношения — проиграть mp3 (Forvo). */
     fun playPronunciation(item: PronunciationItem) {
         val url = item.audioUrl ?: return
-        pronunciationPlayer.play(url)
+        appScope.launch {
+            val boost = settingsStore.data.first().forvoBoostPercent
+            pronunciationPlayer.play(url, boost)
+        }
     }
 
     /** Скрыть ряд произношения. */
