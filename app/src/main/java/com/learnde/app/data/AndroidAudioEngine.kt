@@ -278,28 +278,37 @@ class AndroidAudioEngine @Inject constructor(
 
         captureJob = engineScope.launch {
             val buffer = ShortArray(minBuf)
-            val byteBuffer = ByteBuffer.allocate(minBuf * 2).order(ByteOrder.LITTLE_ENDIAN)
+            
+            // --- НОВОЕ: Буфер на 100 мс (1600 сэмплов при 16 кГц) ---
+            val CHUNK_SIZE_SHORTS = 1600 
+            val chunkBuffer = ShortArray(CHUNK_SIZE_SHORTS)
+            var chunkPos = 0
+            
+            val byteBuffer = ByteBuffer.allocate(CHUNK_SIZE_SHORTS * 2).order(ByteOrder.LITTLE_ENDIAN)
             val rawBytes = byteBuffer.array()
+            val shortBuffer = byteBuffer.asShortBuffer()
 
             try {
-                val shortBuffer = byteBuffer.asShortBuffer()
                 while (isActive && isCapturing) {
                     val read = kotlinx.coroutines.runInterruptible { recorder.read(buffer, 0, buffer.size) }
                     when {
                         read > 0 -> {
                             for (i in 0 until read) {
                                 val amplified = (buffer[i] * micGain).toInt()
-                                buffer[i] = when {
+                                chunkBuffer[chunkPos++] = when {
                                     amplified > Short.MAX_VALUE -> Short.MAX_VALUE
                                     amplified < Short.MIN_VALUE -> Short.MIN_VALUE
                                     else -> amplified.toShort()
                                 }
+                                
+                                // Отправляем строго когда накопилось 100 мс
+                                if (chunkPos == CHUNK_SIZE_SHORTS) {
+                                    shortBuffer.clear()
+                                    shortBuffer.put(chunkBuffer, 0, CHUNK_SIZE_SHORTS)
+                                    _micOutput.tryEmit(rawBytes.copyOf())
+                                    chunkPos = 0
+                                }
                             }
-
-                            byteBuffer.clear()
-                            shortBuffer.clear()
-                            shortBuffer.put(buffer, 0, read)
-                            _micOutput.tryEmit(rawBytes.copyOf(read * 2))
                         }
                         read == 0 -> {
                             yield()
