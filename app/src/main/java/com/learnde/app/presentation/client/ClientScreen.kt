@@ -147,37 +147,46 @@ fun ClientScreen(navController: NavController, viewModel: ClientViewModel = hilt
                 }
             }
 
-            // 4. ДАШБОРД (Элегантная информационная карточка)
+            // 4. ДАШБОРД (Академическая сноска)
             if (state.dashboardText.isNotEmpty()) {
-                Box(
+                Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = Space.lg, vertical = Space.sm)
-                        .clip(RoundedCornerShape(Radius.lg))
-                        .background(pal.accentBlueBg)
-                        .padding(Space.md)
+                        .padding(horizontal = Space.lg, vertical = Space.md)
+                        .height(IntrinsicSize.Min) // Важно для растягивания вертикальной линии
+                        .background(Color.Transparent)
+                        .padding(start = Space.md),
+                    verticalAlignment = Alignment.Top
                 ) {
-                    Row(verticalAlignment = Alignment.Top) {
-                        Icon(
-                            Icons.Filled.Info, 
-                            contentDescription = "Информация", 
-                            tint = pal.accentBlue, 
-                            modifier = Modifier.size(20.dp).padding(top = 2.dp)
+                    // Вертикальная линия цитаты
+                    Box(
+                        modifier = Modifier
+                            .width(3.dp)
+                            .fillMaxHeight()
+                            .background(pal.accentBlue)
+                    )
+                    Spacer(Modifier.width(Space.md))
+                    
+                    Column(modifier = Modifier.weight(1f).padding(vertical = 2.dp)) {
+                        Text(
+                            text = "Примечание", 
+                            style = MaterialTheme.typography.labelSmall, 
+                            color = pal.accentBlue,
+                            fontWeight = FontWeight.Bold
                         )
-                        Spacer(Modifier.width(Space.sm))
+                        Spacer(Modifier.height(2.dp))
                         Text(
                             text = state.dashboardText, 
                             color = pal.textPrimary, 
-                            style = MaterialTheme.typography.bodyLarge, 
-                            modifier = Modifier.weight(1f)
+                            style = MaterialTheme.typography.bodyMedium.copy(fontStyle = androidx.compose.ui.text.font.FontStyle.Italic)
                         )
-                        Spacer(Modifier.width(Space.sm))
-                        IconButton(
-                            onClick = { viewModel.clearDashboard() },
-                            modifier = Modifier.size(24.dp)
-                        ) {
-                            Icon(Icons.Filled.Close, "Закрыть", tint = pal.accentBlue, modifier = Modifier.size(16.dp))
-                        }
+                    }
+                    
+                    IconButton(
+                        onClick = { viewModel.clearDashboard() },
+                        modifier = Modifier.size(24.dp)
+                    ) {
+                        Icon(Icons.Filled.Close, "Закрыть", tint = pal.textDim, modifier = Modifier.size(16.dp))
                     }
                 }
             }
@@ -477,39 +486,47 @@ fun MessageBubble(
 ) {
     val pal = AppTheme.palette
     val isUser = msg.role == ConversationMessage.ROLE_USER
-    val bg = if (isUser) pal.accentBlueBg else pal.surfaceElevated
-    val textColor = if (isUser) pal.accentBlue else pal.textPrimary
-    val shape = RoundedCornerShape(
-        topStart = Radius.lg, topEnd = Radius.lg,
-        bottomStart = if (isUser) Radius.lg else 2.dp, bottomEnd = if (isUser) 2.dp else Radius.lg
-    )
 
-    Column(modifier = modifier.fillMaxWidth().padding(vertical = 2.dp), horizontalAlignment = if (isUser) Alignment.End else Alignment.Start) {
+    Column(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(vertical = Space.sm, horizontal = Space.sm)
+    ) {
         if (showRoleLabels) {
             Text(
                 text = if (isUser) "Вы" else "Ассистент",
-                style = MaterialTheme.typography.labelSmall,
-                color = pal.textDim,
-                modifier = Modifier.padding(bottom = 2.dp, start = 4.dp, end = 4.dp)
+                style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
+                color = if (isUser) pal.accentBlue else pal.textDim,
+                modifier = Modifier.padding(bottom = 4.dp)
             )
         }
-        Box(
-            Modifier.widthIn(max = 300.dp).clip(shape).background(bg)
-                .animateContentSize(animationSpec = tween(durationMillis = 250, easing = LinearOutSlowInEasing))
-                .padding(horizontal = Space.lg, vertical = Space.md),
-        ) {
-            Column {
-                if (msg.text.isNotEmpty()) {
-                    Text(text = msg.text, style = MaterialTheme.typography.bodyLarge, color = textColor, fontSize = (14 * fontScale).sp)
-                }
-                if (msg.attachmentUris.isNotEmpty()) {
-                    if (msg.text.isNotEmpty()) Spacer(Modifier.height(Space.xs))
-                    Text("📎 ${msg.attachmentUris.size} вложение(й)", style = MaterialTheme.typography.labelSmall, color = if (isUser) pal.accentBlue.copy(alpha = 0.7f) else pal.textSecondary)
-                }
-            }
+        
+        if (msg.text.isNotEmpty()) {
+            Text(
+                text = msg.text, 
+                style = MaterialTheme.typography.bodyLarge, 
+                color = if (isUser) pal.accentBlue else pal.textPrimary, 
+                fontSize = (16 * fontScale).sp,
+                modifier = Modifier.padding(start = if (isUser) 0.dp else Space.md)
+            )
         }
+        
+        if (msg.attachmentUris.isNotEmpty()) {
+            if (msg.text.isNotEmpty()) Spacer(Modifier.height(Space.xs))
+            Text(
+                text = "📎 ${msg.attachmentUris.size} вложение(й)", 
+                style = MaterialTheme.typography.labelSmall, 
+                color = pal.textSecondary
+            )
+        }
+        
         if (showTimestamps) {
-            Text(text = timeFormatter.format(Date(msg.timestamp)), style = MaterialTheme.typography.labelSmall, color = pal.textDim, modifier = Modifier.padding(top = 2.dp, start = 4.dp, end = 4.dp))
+            Text(
+                text = timeFormatter.format(Date(msg.timestamp)), 
+                style = MaterialTheme.typography.labelSmall, 
+                color = pal.textDim, 
+                modifier = Modifier.padding(top = 4.dp)
+            )
         }
     }
 }
@@ -522,7 +539,10 @@ fun ChatInputBar(
     val pal = AppTheme.palette
     Row(modifier = modifier.fillMaxWidth(), verticalAlignment = Alignment.Bottom) {
         Row(
-            modifier = Modifier.weight(1f).clip(RoundedCornerShape(Radius.lg)).background(pal.surfaceElevated).padding(4.dp),
+            modifier = Modifier
+                .weight(1f)
+                .background(Color.Transparent)
+                .padding(4.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             IconButton(onClick = onAttach, modifier = Modifier.size(40.dp).clip(RoundedCornerShape(Radius.md))) { 
@@ -530,7 +550,7 @@ fun ChatInputBar(
             }
             OutlinedTextField(
                 value = value, onValueChange = onValueChange, modifier = Modifier.weight(1f),
-                placeholder = { Text("Написать...", style = MaterialTheme.typography.bodyMedium, color = pal.textDim) },
+                placeholder = { Text("Сделать запись...", style = MaterialTheme.typography.bodyMedium, color = pal.textDim) },
                 textStyle = MaterialTheme.typography.bodyLarge, singleLine = false, maxLines = 4,
                 colors = OutlinedTextFieldDefaults.colors(
                     focusedTextColor = pal.textPrimary, unfocusedTextColor = pal.textPrimary, cursorColor = pal.accentBlue, 
