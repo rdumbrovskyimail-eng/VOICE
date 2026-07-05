@@ -28,7 +28,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.learnde.app.data.settings.ThemeMode
 import com.learnde.app.data.voice.VoiceCatalog
 import com.learnde.app.domain.model.LatencyProfile
 import com.learnde.app.translate.TranslatorLanguages
@@ -90,14 +89,9 @@ fun SettingsScreen(onBack: () -> Unit, viewModel: SettingsViewModel = hiltViewMo
                 )
             }
 
-            // ★ Тема оформления.
-            SettingsSection("Интерфейс") {
-                ThemePickerField(settings.themeMode, viewModel::updateThemeMode)
-            }
-
             SettingsSection("Поведение") {
                 SettingsTextField("Системная инструкция", settings.systemInstruction, viewModel::updateSystemInstruction, "Ты ассистент...", false)
-                SettingsSlider("Креативность: ${String.format("%.1f", settings.temperature)}", settings.temperature, viewModel::updateTemperature, 0f..2f)
+                SettingsSlider("Креативность: ${String.format(java.util.Locale.US, "%.1f", settings.temperature)}", settings.temperature, viewModel::updateTemperature, 0f..2f)
                 ThinkingPickerField(settings.latencyProfile, viewModel::updateLatencyProfile)
                 SettingsSwitch("Google Search", settings.enableGoogleSearch, viewModel::updateGoogleSearch)
                 SettingsSwitch("Перебивание (Barge-in)", settings.bargeInEnabled, viewModel::updateBargeIn)
@@ -245,29 +239,17 @@ private fun LanguagePickerField(label: String, selectedCode: String, onSelect: (
     )
 }
 
-/** ★ Выбор темы оформления. */
-@Composable
-private fun ThemePickerField(selected: ThemeMode, onSelect: (ThemeMode) -> Unit) {
-    val names = mapOf(
-        ThemeMode.AUTO to "Как в системе",
-        ThemeMode.LIGHT to "Светлая",
-        ThemeMode.DARK to "Тёмная",
-    )
-    DropdownField(
-        label = "Тема",
-        valueText = names[selected] ?: selected.name,
-        options = ThemeMode.entries.map { it.name to (names[it] ?: it.name) },
-        onSelect = { onSelect(ThemeMode.valueOf(it)) }
-    )
-}
-
 @Composable
 private fun VoicePickerField(selectedId: String, onSelect: (String) -> Unit) {
     val current = VoiceCatalog.byId(selectedId) ?: VoiceCatalog.all.first()
+    fun label(v: com.learnde.app.data.voice.GeminiVoice) = buildString {
+        append(v.id); append(" · "); append(v.trait)
+        if (v.id in VoiceCatalog.recommended) append("  ★")
+    }
     DropdownField(
         label = "Голос",
-        valueText = "${current.id} · ${current.trait}",
-        options = VoiceCatalog.all.map { it.id to it.id },
+        valueText = label(current),
+        options = VoiceCatalog.all.map { it.id to label(it) },
         onSelect = onSelect
     )
 }
