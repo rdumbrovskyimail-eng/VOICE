@@ -1,12 +1,4 @@
-// ═══════════════════════════════════════════════════════════
-// ЗАМЕНА (build-speed optimized + Vosk)
-// Путь: app/build.gradle.kts
-// Изменения от исходной версии:
-//   + JNA + Vosk зависимости (offline ASR)
-//   + ndk.abiFilters — только ARM (urезает x86 натив из APK)
-//   + packaging: jniLibs.useLegacyPackaging=false
-//                + resources excludes/pickFirsts (анти-конфликт)
-//   + androidResources.noCompress — Vosk-модели не сжимаются
+// Путь: app/build.gradle.kts  (build-speed optimized, Cloud Gemini Live — без офлайн-ASR)
 // ═══════════════════════════════════════════════════════════
 plugins {
     id("com.android.application")
@@ -75,7 +67,6 @@ android {
 
     packaging {
         jniLibs {
-            keepDebugSymbols += "**/*.so"
             useLegacyPackaging = false
         }
         resources {
