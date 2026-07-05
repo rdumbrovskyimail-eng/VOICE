@@ -23,6 +23,10 @@ object AppSettingsSerializer : Serializer<AppSettings> {
         } catch (e: SerializationException) {
             e.printStackTrace()
             defaultValue
+        } catch (e: Exception) {
+            // Битый/усечённый файл (kill при записи) → дефолты вместо краш-лупа.
+            e.printStackTrace()
+            defaultValue
         }
     }
 
