@@ -12,7 +12,6 @@ import androidx.datastore.core.DataStore
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.learnde.app.data.settings.AppSettings
-import com.learnde.app.data.settings.ThemeMode
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.stateIn
@@ -55,10 +54,6 @@ class SettingsViewModel @Inject constructor(
     }
 
     // ─────────────── ★ Новое ───────────────
-
-    /** Тема интерфейса: AUTO / LIGHT / DARK. */
-    fun updateThemeMode(mode: ThemeMode) =
-        viewModelScope.launch { settingsStore.updateData { it.copy(themeMode = mode) } }
 
     /** Усиление произношений Forvo, % (0–100). */
     fun updateForvoBoost(percent: Float) =
