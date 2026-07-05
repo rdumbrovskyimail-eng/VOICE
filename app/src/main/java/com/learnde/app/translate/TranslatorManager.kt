@@ -241,24 +241,36 @@ class TranslatorManager @Inject constructor(
                 }
 
                 is TranslateEvent.Closed -> {
-                    if (running && ev.code != 1000 && ev.code != 1001) {
-                        attempts++
-                        if (attempts <= RECONNECT_ATTEMPTS) {
-                            _state.update { it.copy(reconnecting = true) }
-                            val backoff = min(
-                                RECONNECT_BASE_MS * (1L shl (attempts - 1)),
-                                RECONNECT_MAX_MS
-                            )
-                            logger.w("Translate[$to]: reconnect #$attempts in ${backoff}ms (code=${ev.code})")
-                            delay(backoff)
-                            if (running) client.connect(apiKey)
-                        } else {
+                    if (running) {
+                        // Фатальные ошибки (неверный ключ, лимиты, кривой конфиг) — падаем сразу
+                        if (ev.code == 1007 || ev.code == 1008 || ev.code == 4003) {
                             _state.update {
                                 it.copy(
                                     status = TranslatorStatus.Error,
                                     reconnecting = false,
-                                    error = "Соединение потеряно (${ev.code}). Нажмите кнопку, чтобы переподключиться.",
+                                    error = "Ошибка конфигурации или ключа (${ev.code}).",
                                 )
+                            }
+                        } else {
+                            // Штатные разрывы (1000, 1001) и сетевые сбои — переподключаемся
+                            attempts++
+                            if (attempts <= RECONNECT_ATTEMPTS) {
+                                _state.update { it.copy(reconnecting = true) }
+                                val backoff = min(
+                                    RECONNECT_BASE_MS * (1L shl (attempts - 1)),
+                                    RECONNECT_MAX_MS
+                                )
+                                logger.w("Translate[$to]: reconnect #$attempts in ${backoff}ms (code=${ev.code})")
+                                delay(backoff)
+                                if (running) client.connect(apiKey)
+                            } else {
+                                _state.update {
+                                    it.copy(
+                                        status = TranslatorStatus.Error,
+                                        reconnecting = false,
+                                        error = "Соединение потеряно (${ev.code}). Нажмите кнопку, чтобы переподключиться.",
+                                    )
+                                }
                             }
                         }
                     }
