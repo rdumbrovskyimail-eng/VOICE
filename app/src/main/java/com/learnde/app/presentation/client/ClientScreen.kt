@@ -113,7 +113,7 @@ fun ClientScreen(navController: NavController, viewModel: ClientViewModel = hilt
             // 3. ПРОМПТ
             Column(modifier = Modifier.padding(horizontal = Space.lg, vertical = Space.md)) {
                 Row(
-                    Modifier.fillMaxWidth().clip(RoundedCornerShape(Radius.md)).background(pal.surface).padding(4.dp),
+                    Modifier.fillMaxWidth().background(pal.surfaceVariant, RoundedCornerShape(Radius.sm)).padding(4.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     IconButton(onClick = { promptPicker.launch(arrayOf("*/*")) }, modifier = Modifier.size(36.dp).clip(RoundedCornerShape(Radius.sm))) {
@@ -207,8 +207,7 @@ fun ClientScreen(navController: NavController, viewModel: ClientViewModel = hilt
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(horizontal = Space.lg, vertical = Space.sm)
-                        .clip(RoundedCornerShape(Radius.lg))
-                        .background(pal.surfaceElevated)
+                        .background(pal.surfaceVariant, RoundedCornerShape(Radius.md))
                 ) {
                     CameraLayer(
                         active = true, onFrame = { viewModel.sendCameraFrame(it) },
@@ -340,8 +339,8 @@ private fun PronunciationChips(
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     modifier = Modifier
-                        .clip(RoundedCornerShape(Radius.pill))
-                        .background(if (isError) pal.errorBg else pal.accentBlueBg)
+                        .clip(RoundedCornerShape(Radius.sm))
+                        .background(pal.surfaceVariant)
                         .clickable(enabled = ready) { onPlay(item) }
                         .padding(horizontal = Space.md, vertical = Space.sm)
                 ) {
@@ -384,8 +383,7 @@ private fun AttachmentTile(ctx: android.content.Context, uri: Uri, onRemove: (Ur
     Box(
         Modifier
             .size(56.dp)
-            .clip(RoundedCornerShape(Radius.md))
-            .background(pal.surfaceElevated),
+            .background(pal.surfaceVariant, RoundedCornerShape(Radius.sm)),
         contentAlignment = Alignment.Center,
     ) {
         val b = bmp
@@ -568,12 +566,11 @@ fun ChatInputBar(
             .padding(horizontal = Space.lg, vertical = Space.md),
         verticalAlignment = Alignment.Bottom
     ) {
-        // Главный контейнер инпута (Светло-серая таблетка)
+        // Главный контейнер инпута
         Row(
             modifier = Modifier
                 .weight(1f)
-                .clip(RoundedCornerShape(Radius.xl))
-                .background(pal.surfaceVariant)
+                .background(pal.surfaceVariant, RoundedCornerShape(Radius.md))
                 .padding(start = 4.dp, end = 4.dp, top = 4.dp, bottom = 4.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
