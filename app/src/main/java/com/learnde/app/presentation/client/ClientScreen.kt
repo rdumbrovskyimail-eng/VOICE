@@ -81,26 +81,24 @@ fun ClientScreen(navController: NavController, viewModel: ClientViewModel = hilt
     Box(modifier = Modifier.fillMaxSize().background(pal.background)) {
         Column(modifier = Modifier.fillMaxSize().systemBarsPadding().imePadding()) {
             
-            // 1. ШАПКА
+            // 1. ШАПКА Ambient
             AppHeader(
-                presence = presence, isLinkActive = state.isConnected || state.isConnecting, camMode = state.cameraOn,
+                presence = presence, 
+                isLinkActive = state.isConnected || state.isConnecting, 
+                camMode = state.cameraOn,
                 onToggleConnection = {
                     val need = buildList {
                         if (!hasRecord()) add(Manifest.permission.RECORD_AUDIO)
-                        if (android.os.Build.VERSION.SDK_INT >= 33 &&
-                            ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS)
-                                != PackageManager.PERMISSION_GRANTED
-                        ) add(Manifest.permission.POST_NOTIFICATIONS)
+                        if (android.os.Build.VERSION.SDK_INT >= 33 && ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) add(Manifest.permission.POST_NOTIFICATIONS)
                     }
                     if (need.isEmpty()) viewModel.toggleConnection()
                     else connectLauncher.launch(need.toTypedArray())
                 },
-                onToggleCam = { viewModel.toggleCamera() }, onSettings = { navController.navigate(Routes.SETTINGS) },
-                onTranslate = { navController.navigate(Routes.TRANSLATOR) },
+                onToggleCam = { viewModel.toggleCamera() }, 
+                onSettings = { navController.navigate(Routes.SETTINGS) },
                 modifier = Modifier.padding(horizontal = Space.lg, vertical = Space.sm)
             )
-
-            HorizontalDivider(color = pal.outline, thickness = 1.dp)
+            Spacer(Modifier.height(Space.sm)) // Линию заменили на "воздух"
 
             // 2. ОШИБКИ
             if (state.error != null) {
@@ -251,8 +249,6 @@ fun ClientScreen(navController: NavController, viewModel: ClientViewModel = hilt
 
             // 7. ВВОД И ВЛОЖЕНИЯ
             Column(modifier = Modifier.fillMaxWidth().background(pal.background)) {
-                // Элегантный разделитель, прижимающий чат
-                HorizontalDivider(color = pal.outline, thickness = 1.dp)
                 
                 if (chatAttachments.isNotEmpty()) {
                     AttachmentChips(chatAttachments) { chatAttachments = chatAttachments - it }
@@ -487,47 +483,42 @@ fun MessageBubble(
     val pal = AppTheme.palette
     val isUser = msg.role == ConversationMessage.ROLE_USER
 
+    // Искусный минимализм. Вместо плашек мы меняем оттенки, шрифты и расположение.
+    val textColor = if (isUser) pal.textDim else pal.textPrimary
+    val align = if (isUser) Alignment.End else Alignment.Start
+    val textAlign = if (isUser) TextAlign.End else TextAlign.Start
+    
+    // Большие отступы, чтобы тексты свободно парили на холсте
+    val startPad = if (isUser) 64.dp else 0.dp
+    val endPad = if (isUser) 0.dp else 64.dp
+
     Column(
         modifier = modifier
             .fillMaxWidth()
-            .padding(vertical = Space.sm, horizontal = Space.sm)
+            .padding(vertical = Space.md)
+            .padding(start = startPad, end = endPad),
+        horizontalAlignment = align
     ) {
-        if (showRoleLabels) {
-            Text(
-                text = if (isUser) "Вы" else "Ассистент",
-                style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
-                // Роли подписываем синей ручкой или серым цветом
-                color = if (isUser) pal.accentBlue else pal.textDim,
-                modifier = Modifier.padding(bottom = 4.dp)
-            )
-        }
-        
         if (msg.text.isNotEmpty()) {
             Text(
-                text = msg.text, 
-                style = MaterialTheme.typography.bodyLarge, 
-                // ВЕСЬ ТЕКСТ ТЕПЕРЬ СТРОГО ТЕМНЫЙ (textPrimary)
-                color = pal.textPrimary, 
-                fontSize = (16 * fontScale).sp,
-                modifier = Modifier.padding(start = if (isUser) 0.dp else Space.md)
+                text = msg.text,
+                style = MaterialTheme.typography.bodyLarge,
+                color = textColor,
+                fontSize = (if (isUser) 18f else 22f * fontScale).sp, // ИИ всегда немного доминирует
+                lineHeight = (if (isUser) 24f else 30f * fontScale).sp,
+                fontWeight = if (isUser) FontWeight.Normal else FontWeight.Medium,
+                textAlign = textAlign,
             )
         }
         
+        // Вложения становятся не кнопкой, а элегантной курсивной аннотацией 
         if (msg.attachmentUris.isNotEmpty()) {
-            if (msg.text.isNotEmpty()) Spacer(Modifier.height(Space.xs))
+            Spacer(Modifier.height(Space.xs))
             Text(
-                text = "📎 ${msg.attachmentUris.size} вложение(й)", 
-                style = MaterialTheme.typography.labelSmall, 
-                color = pal.textSecondary
-            )
-        }
-        
-        if (showTimestamps) {
-            Text(
-                text = timeFormatter.format(Date(msg.timestamp)), 
-                style = MaterialTheme.typography.labelSmall, 
-                color = pal.textDim, 
-                modifier = Modifier.padding(top = 4.dp)
+                text = "— прикреплены файлы (${msg.attachmentUris.size})",
+                style = MaterialTheme.typography.labelSmall.copy(fontStyle = androidx.compose.ui.text.font.FontStyle.Italic),
+                color = pal.textDim.copy(alpha = 0.5f),
+                textAlign = textAlign
             )
         }
     }
@@ -539,40 +530,62 @@ fun ChatInputBar(
     isMicActive: Boolean, onToggleMic: () -> Unit, modifier: Modifier = Modifier,
 ) {
     val pal = AppTheme.palette
-    Row(modifier = modifier.fillMaxWidth(), verticalAlignment = Alignment.Bottom) {
-        Row(
-            modifier = Modifier
-                .weight(1f)
-                .background(Color.Transparent)
-                .padding(4.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            IconButton(onClick = onAttach, modifier = Modifier.size(40.dp).clip(RoundedCornerShape(Radius.md))) { 
-                Icon(Icons.Filled.AttachFile, "Прикрепить", tint = pal.textSecondary, modifier = Modifier.size(20.dp)) 
-            }
-            OutlinedTextField(
-                value = value, onValueChange = onValueChange, modifier = Modifier.weight(1f),
-                placeholder = { Text("Сделать запись...", style = MaterialTheme.typography.bodyMedium, color = pal.textDim) },
-                textStyle = MaterialTheme.typography.bodyLarge, singleLine = false, maxLines = 4,
-                colors = OutlinedTextFieldDefaults.colors(
-                    focusedTextColor = pal.textPrimary, unfocusedTextColor = pal.textPrimary, cursorColor = pal.accentBlue, 
-                    focusedBorderColor = Color.Transparent, unfocusedBorderColor = Color.Transparent,
-                    focusedContainerColor = Color.Transparent, unfocusedContainerColor = Color.Transparent,
-                )
-            )
-            IconButton(
-                onClick = onSend, enabled = value.isNotBlank(),
-                modifier = Modifier.size(40.dp).clip(RoundedCornerShape(Radius.md)).background(if (value.isNotBlank()) pal.accentBlue else Color.Transparent)
-            ) { 
-                Icon(Icons.Filled.Send, "Отправить", tint = if (value.isNotBlank()) Color.White else pal.textDim, modifier = Modifier.size(18.dp)) 
-            }
+
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(horizontal = Space.xl, vertical = Space.lg)
+            // Пилл (Таблетка) парящая над фоном 
+            .clip(RoundedCornerShape(32.dp))
+            .background(pal.surfaceElevated.copy(alpha = 0.5f)) // Стеклянная прозрачность
+            .padding(horizontal = 8.dp, vertical = 6.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        IconButton(onClick = onAttach, modifier = Modifier.size(40.dp)) {
+            Icon(Icons.Filled.AttachFile, "Вложения", tint = pal.textSecondary)
         }
-        Spacer(Modifier.width(Space.sm))
-        IconButton(
-            onClick = onToggleMic,
-            modifier = Modifier.size(48.dp).clip(RoundedCornerShape(Radius.lg)).background(if (isMicActive) pal.accentGreenBg else pal.surfaceElevated)
-        ) { 
-            Icon(if (isMicActive) Icons.Filled.Mic else Icons.Filled.MicOff, "Микрофон", tint = if (isMicActive) pal.accentGreen else pal.textSecondary, modifier = Modifier.size(24.dp)) 
+
+        // Невидимый текстовый элемент (никаких рамочек и placeholder'ов от Outlined)
+        androidx.compose.foundation.text.BasicTextField(
+            value = value,
+            onValueChange = onValueChange,
+            textStyle = MaterialTheme.typography.bodyLarge.copy(color = pal.textPrimary, fontSize = 18.sp),
+            modifier = Modifier.weight(1f).padding(horizontal = Space.sm),
+            decorationBox = { innerTextField ->
+                if (value.isEmpty()) {
+                    Text(
+                        text = "Коснитесь, чтобы заговорить", 
+                        color = pal.textDim.copy(alpha = 0.6f), 
+                        style = MaterialTheme.typography.bodyLarge.copy(fontSize = 18.sp)
+                    )
+                }
+                innerTextField()
+            }
+        )
+
+        // Изящный индикатор "Кнопки", динамически меняющий значение 
+        if (value.isNotBlank()) {
+            IconButton(
+                onClick = onSend, 
+                modifier = Modifier.size(44.dp).clip(CircleShape).background(pal.textPrimary)
+            ) {
+                Icon(Icons.Filled.Send, "Отправить", tint = pal.background, modifier = Modifier.size(16.dp))
+            }
+        } else {
+            Box(
+                modifier = Modifier
+                    .size(44.dp)
+                    .clip(CircleShape)
+                    .background(if (isMicActive) pal.accentBlue else Color.Transparent)
+                    .clickable { onToggleMic() },
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.Mic, 
+                    contentDescription = "Микрофон", 
+                    tint = if (isMicActive) Color.White else pal.textPrimary
+                )
+            }
         }
     }
 }
