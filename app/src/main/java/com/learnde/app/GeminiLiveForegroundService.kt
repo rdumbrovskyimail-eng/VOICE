@@ -110,15 +110,24 @@ class GeminiLiveForegroundService : Service() {
 
     private fun startForegroundSafe() {
         try {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                // API 30+: тип MICROPHONE существует, обязателен для mic-FGS в фоне.
                 startForeground(
                     NOTIFICATION_ID,
                     buildNotification(),
                     ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE or
                             ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK
                 )
+            } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                // API 29: MICROPHONE константы нет — только MEDIA_PLAYBACK.
+                // Для мика в фоне на Q достаточно любого активного FGS без типа.
+                startForeground(
+                    NOTIFICATION_ID,
+                    buildNotification(),
+                    ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK
+                )
             } else {
-                // Android 9 / 10 (API 28/29-): 2-аргументная версия без типа сервиса.
+                // Android 9 (API 28-): 2-аргументная версия без типа сервиса.
                 startForeground(NOTIFICATION_ID, buildNotification())
             }
         } catch (e: Exception) {
