@@ -76,6 +76,7 @@ class ForvoRepository @Inject constructor(
             ?.firstOrNull()?.jsonObject
             ?.get("pathmp3")?.jsonPrimitive?.content
             ?.takeIf { it.isNotBlank() }
+            ?.replace("http://", "https://") // cleartext запрещён с API 28
     }.getOrNull()
 
     companion object {
