@@ -66,7 +66,10 @@ fun ClientScreen(navController: NavController, viewModel: ClientViewModel = hilt
     LaunchedEffect(state.activePrompt) { if (state.activePrompt.isNotEmpty() && promptText.isEmpty()) promptText = state.activePrompt }
 
     fun hasRecord() = ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
-    val connectLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { r -> if (r[Manifest.permission.RECORD_AUDIO] == true) viewModel.toggleConnection() }
+    val connectLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { r ->
+        val recOk = r[Manifest.permission.RECORD_AUDIO] ?: hasRecord()
+        if (recOk) viewModel.toggleConnection() // POST_NOTIFICATIONS опционален — отказ сессию не блокирует
+    }
     val micLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { g -> if (g) viewModel.toggleMic() }
 
     Box(modifier = Modifier.fillMaxSize().background(pal.background)) {
@@ -75,7 +78,17 @@ fun ClientScreen(navController: NavController, viewModel: ClientViewModel = hilt
             // 1. ШАПКА
             AppHeader(
                 presence = presence, isLinkActive = state.isConnected || state.isConnecting, camMode = state.cameraOn,
-                onToggleConnection = { if (hasRecord()) viewModel.toggleConnection() else connectLauncher.launch(arrayOf(Manifest.permission.RECORD_AUDIO)) },
+                onToggleConnection = {
+                    val need = buildList {
+                        if (!hasRecord()) add(Manifest.permission.RECORD_AUDIO)
+                        if (android.os.Build.VERSION.SDK_INT >= 33 &&
+                            ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS)
+                                != PackageManager.PERMISSION_GRANTED
+                        ) add(Manifest.permission.POST_NOTIFICATIONS)
+                    }
+                    if (need.isEmpty()) viewModel.toggleConnection()
+                    else connectLauncher.launch(need.toTypedArray())
+                },
                 onToggleCam = { viewModel.toggleCamera() }, onSettings = { navController.navigate(Routes.SETTINGS) },
                 onTranslate = { navController.navigate(Routes.TRANSLATOR) },
                 modifier = Modifier.padding(horizontal = Space.lg, vertical = Space.sm)
@@ -246,9 +259,9 @@ private fun ChatList(messages: List<ConversationMessage>, prefs: ChatPrefs, modi
     val timeFormatter = remember { SimpleDateFormat("HH:mm", Locale.getDefault()) }
     
     // Плавный скролл при появлении новых сообщений ИЛИ при стриминге текста
-    LaunchedEffect(messages.size, messages.lastOrNull()?.text?.length) { 
-        if (messages.isNotEmpty()) {
-            listState.animateScrollToItem(messages.lastIndex) 
+    LaunchedEffect(messages.size, messages.lastOrNull()?.text?.length) {
+        if (prefs.autoScroll && messages.isNotEmpty()) {
+            listState.animateScrollToItem(messages.lastIndex)
         }
     }
 
