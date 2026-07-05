@@ -33,38 +33,29 @@ fun AppHeader(
     onToggleConnection: () -> Unit,
     onToggleCam: () -> Unit,
     onSettings: () -> Unit,
-    onTranslate: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val pal = AppTheme.palette
+    // Шапка стала воздушной. Нет подложек кнопок и жестких границ.
     Row(modifier = modifier.fillMaxWidth().height(56.dp), verticalAlignment = Alignment.CenterVertically) {
         StatusLabel(presence)
         Spacer(Modifier.weight(1f))
 
-        // Крупная «T» — открыть синхронный переводчик
-        Box(
-            Modifier.size(44.dp).clip(RoundedCornerShape(Radius.md)).background(pal.accentBlue)
-                .clickable(onClick = onTranslate),
-            contentAlignment = Alignment.Center
-        ) {
-            Text("T", color = Color.White, fontSize = 22.sp, fontWeight = FontWeight.Bold)
-        }
-        Spacer(Modifier.width(Space.sm))
-
-        val (btnBg, btnIconTint) = if (isLinkActive) pal.errorBg to pal.error else pal.accentBlue to Color.White
-
+        val btnIconTint = if (isLinkActive) pal.error else pal.textPrimary
+        
         IconButton(
             onClick = onToggleConnection,
-            modifier = Modifier.size(40.dp).clip(RoundedCornerShape(Radius.md)).background(btnBg),
+            modifier = Modifier.size(44.dp) // Теперь просто крупная изящная иконка
         ) {
             Icon(
-                imageVector = if (isLinkActive) Icons.Filled.Stop else Icons.Filled.PlayArrow, 
-                contentDescription = "Подключение", tint = btnIconTint, modifier = Modifier.size(22.dp)
+                imageVector = if (isLinkActive) Icons.Filled.Stop else Icons.Filled.PlayArrow,
+                contentDescription = "Подключение", 
+                tint = btnIconTint, 
+                modifier = Modifier.size(28.dp)
             )
         }
-        Spacer(Modifier.width(Space.sm))
+        
         ToolbarIcon(icon = Icons.Filled.Videocam, label = "Камера", active = camMode, onClick = onToggleCam)
-        Spacer(Modifier.width(Space.sm))
         ToolbarIcon(icon = Icons.Filled.Settings, label = "Настройки", active = false, onClick = onSettings)
     }
 }
