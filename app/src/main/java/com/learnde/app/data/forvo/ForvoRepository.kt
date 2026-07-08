@@ -1,3 +1,4 @@
+// Путь: app/src/main/java/com/learnde/app/data/forvo/ForvoRepository.kt
 package com.learnde.app.data.forvo
 
 import androidx.datastore.core.DataStore
@@ -18,10 +19,6 @@ import java.util.concurrent.TimeUnit
 import javax.inject.Inject
 import javax.inject.Singleton
 
-/**
- * Forvo Pronunciation API: слово → URL mp3 эталонного (top-rated) произношения.
- * Ключ берётся из AppSettings.forvoApiKey. Пустой ключ / не найдено / сбой → null (без падений).
- */
 @Singleton
 class ForvoRepository @Inject constructor(
     private val settingsStore: DataStore<AppSettings>,
@@ -33,8 +30,6 @@ class ForvoRepository @Inject constructor(
         .build()
 
     private val json = Json { ignoreUnknownKeys = true }
-
-    // Кэш «lang:слово → URL»: бережём лимит плана, слова повторяются.
     private val cache = ConcurrentHashMap<String, String>()
 
     suspend fun standardPronunciationUrl(word: String, language: String = "de"): String? =
@@ -44,19 +39,27 @@ class ForvoRepository @Inject constructor(
                 logger.w("Forvo: ключ не задан — пропускаю «$word»")
                 return@withContext null
             }
-            val cacheKey = "$language:${word.lowercase()}"
+
+            // 1. Очищаем слово от немецких артиклей (der, die, das, ein, eine)
+            // 2. Убираем знаки препинания, оставляем только буквы (вкл. умляуты), цифры и дефисы
+            val searchWord = word
+                .replace(Regex("^(der|die|das|ein|eine)\\s+", RegexOption.IGNORE_CASE), "")
+                .replace(Regex("[^\\p{L}\\p{M}\\d\\s-]"), "")
+                .trim()
+
+            if (searchWord.isEmpty()) return@withContext null
+
+            val cacheKey = "$language:${searchWord.lowercase()}"
             cache[cacheKey]?.let { return@withContext it }
 
-            // Параметры Forvo идут в ПУТИ. Кодируем слово как path-сегмент:
-            // умляуты → %C3%xx, пробел → %20 (URLEncoder даёт '+', заменяем).
-            val encoded = URLEncoder.encode(word, "UTF-8").replace("+", "%20")
+            val encoded = URLEncoder.encode(searchWord, "UTF-8").replace("+", "%20")
             val url = "$HOST/key/$key/format/json/action/standard-pronunciation" +
                 "/word/$encoded/language/$language"
 
             try {
                 client.newCall(Request.Builder().url(url).build()).execute().use { resp ->
                     if (!resp.isSuccessful) {
-                        logger.w("Forvo: HTTP ${resp.code} для «$word»")
+                        logger.w("Forvo: HTTP ${resp.code} для «$searchWord» (оригинал: $word)")
                         return@withContext null
                     }
                     val mp3 = parseFirstMp3(resp.body?.string().orEmpty())
@@ -64,12 +67,11 @@ class ForvoRepository @Inject constructor(
                     mp3
                 }
             } catch (e: Exception) {
-                logger.w("Forvo: сбой запроса для «$word»: ${e.message}")
+                logger.w("Forvo: сбой запроса для «$searchWord»: ${e.message}")
                 null
             }
         }
 
-    // Ответ: { "items": [ { "pathmp3": "https://...", ... } ] }
     private fun parseFirstMp3(body: String): String? = runCatching {
         json.parseToJsonElement(body)
             .jsonObject["items"]?.jsonArray
@@ -80,7 +82,6 @@ class ForvoRepository @Inject constructor(
     }.getOrNull()
 
     companion object {
-        // Стандартный (free) план Forvo. Для коммерческого: apicommercial.forvo.com
         private const val HOST = "https://apifree.forvo.com"
     }
 }
