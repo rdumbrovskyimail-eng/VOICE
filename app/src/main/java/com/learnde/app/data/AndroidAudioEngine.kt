@@ -277,6 +277,7 @@ class AndroidAudioEngine @Inject constructor(
         logger.d("Recording started (rate=$sampleRate, minBuf=$minBuf)")
 
         captureJob = engineScope.launch {
+            android.os.Process.setThreadPriority(android.os.Process.THREAD_PRIORITY_URGENT_AUDIO)
             val buffer = ShortArray(minBuf)
             
             // --- НОВОЕ: Буфер на 100 мс (1600 сэмплов при 16 кГц) ---
@@ -413,6 +414,7 @@ class AndroidAudioEngine @Inject constructor(
         logger.d("Speaker ready (rate=$sampleRate, commRoute=$useCommRoute, gain=$playbackGain)")
         val myGen = ++playbackLoopGen
         playbackJob = engineScope.launch {
+            android.os.Process.setThreadPriority(android.os.Process.THREAD_PRIORITY_URGENT_AUDIO)
             try {
                 for (chunk in playbackChannel) {
                     if (!isActive || myGen != playbackLoopGen) break
