@@ -60,7 +60,6 @@ fun MessageBubble(
     Column(modifier = modifier.fillMaxWidth().padding(vertical = 2.dp), horizontalAlignment = if (isUser) Alignment.End else Alignment.Start) {
         Box(
             Modifier.widthIn(max = 300.dp).clip(shape).background(bg)
-                .animateContentSize(animationSpec = tween(durationMillis = 250, easing = LinearOutSlowInEasing))
                 .padding(horizontal = Space.lg, vertical = Space.md),
         ) {
             Column {
