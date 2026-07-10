@@ -98,11 +98,27 @@ class AttachmentProcessor @Inject constructor(
         context.contentResolver.openInputStream(uri)?.use { it.readBytes().decodeToString() } ?: ""
 
     private fun loadImageAsJpeg(uri: Uri): ByteArray? {
-        val src = context.contentResolver.openInputStream(uri)?.use {
-            BitmapFactory.decodeStream(it)
-        } ?: return null
+        val cr = context.contentResolver
+        
+        // 1. Читаем только размеры картинки (не загружая пиксели в память)
+        val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        cr.openInputStream(uri)?.use { BitmapFactory.decodeStream(it, null, bounds) }
+        if (bounds.outWidth <= 0) return null
+
+        // 2. Вычисляем коэффициент сжатия (inSampleSize) для экономии RAM
+        var sample = 1
+        val longest = maxOf(bounds.outWidth, bounds.outHeight)
+        while (longest / (sample * 2) >= MAX_IMAGE_SIDE) sample *= 2
+
+        // 3. Загружаем уже уменьшенную копию
+        val opts = BitmapFactory.Options().apply { inSampleSize = sample }
+        val src = cr.openInputStream(uri)?.use { BitmapFactory.decodeStream(it, null, opts) } 
+            ?: return null
+
+        // 4. Точная подгонка размера (если inSampleSize сжал недостаточно)
         val scaled = downscale(src)
         if (scaled != src) src.recycle()
+        
         return scaled.toJpeg(JPEG_QUALITY).also { scaled.recycle() }
     }
 
