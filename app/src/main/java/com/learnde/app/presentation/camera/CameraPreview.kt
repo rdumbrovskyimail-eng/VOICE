@@ -116,6 +116,7 @@ private fun CameraPreview(
                 val analysis = ImageAnalysis.Builder()
                     .setOutputImageFormat(ImageAnalysis.OUTPUT_IMAGE_FORMAT_RGBA_8888)
                     .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
+                    .setTargetResolution(android.util.Size(640, 480))
                     .build()
                     .also { ia ->
                         ia.setAnalyzer(executor) { proxy ->
