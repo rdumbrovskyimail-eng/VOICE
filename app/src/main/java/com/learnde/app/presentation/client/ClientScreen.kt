@@ -511,7 +511,7 @@ fun MessageBubble(
             // Сообщение пользователя: Серый "пузырь" (Pill-like)
             Box(
                 Modifier
-                    .widthIn(max = 320.dp)
+                    .fillMaxWidth(0.85f)
                     .clip(RoundedCornerShape(Radius.xl))
                     .background(pal.surfaceVariant)
                     .padding(horizontal = Space.lg, vertical = 10.dp)
